@@ -103,5 +103,228 @@ pub fn preprocess_dir(path: &std::path::Path) -> Result<usize> {
 pub fn prepare_lua() -> Result<Lua> {
     let lua = Lua::new();
 
+    // create a table called "reluax" with common utility functions
+    // and put it in the global scope
+    lua.context(|ctx| -> Result<()> {
+        let reluax = ctx.create_table()?;
+
+        let url_matches = ctx.create_function(utils::url_matches)?;
+        reluax.set("url_matches", url_matches)?;
+        let url_extract = ctx.create_function(utils::url_extract)?;
+        reluax.set("url_extract", url_extract)?;
+
+        ctx.globals().set("reluax", reluax)?;
+
+        Ok(())
+    })?;
+
     Ok(lua)
+}
+
+mod utils {
+    use rlua::{Context, Result, Table};
+
+    /// Check if a path matches a pattern
+    ///
+    /// A pattern can contain the following:
+    /// - `*` matches any number of characters
+    /// - `{name}` matches anything except `/` and captures the value as `name`
+    ///
+    /// Example patterns:
+    /// '/foo/bar'
+    /// '/foo/{bar}' -> in a case of '/foo/baz' will capture 'baz' as 'bar'
+    /// '/foo/*' -> in a case of '/foo/baz' will match
+    ///
+    /// This function only checks if the path matches the pattern, it does not
+    /// capture any values.
+    pub fn url_matches(_: Context<'_>, (pattern, path): (String, String)) -> Result<bool> {
+        let mut path = path.chars();
+        let mut pattern = pattern.chars();
+
+        let mut path_char = path.next();
+        let mut pattern_char = pattern.next();
+
+        loop {
+            if path_char.is_none() && (pattern_char.is_none() || pattern_char == Some('*')) {
+                return Ok(true);
+            } else if path_char == pattern_char {
+                path_char = path.next();
+                pattern_char = pattern.next();
+            } else if pattern_char == Some('*') {
+                pattern_char = pattern.next();
+                if pattern_char.is_none() {
+                    return Ok(true);
+                }
+                while path_char != pattern_char {
+                    path_char = path.next();
+                    if path_char.is_none() {
+                        return Ok(false);
+                    }
+                }
+            } else if pattern_char == Some('{') {
+                pattern_char = pattern.next();
+                let mut param_name = String::new();
+                while pattern_char != Some('}') {
+                    param_name.push(pattern_char.unwrap());
+                    pattern_char = pattern.next();
+                }
+                pattern_char = pattern.next();
+                while path_char != Some('/') && path_char.is_some() {
+                    path_char = path.next();
+                }
+                if path_char.is_none() {
+                    return Ok(true);
+                }
+            } else {
+                return Ok(false);
+            }
+        }
+    }
+
+    /// Extract values from a path using a pattern
+    ///
+    /// A pattern can contain the following:
+    /// - `*` matches any number of characters
+    /// - `{name}` matches anything except `/` and captures the value as `name`
+    ///
+    /// This function will return a table with the captured values.
+    pub fn url_extract(ctx: Context<'_>, (pattern, path): (String, String)) -> Result<Table> {
+        let mut path = path.chars();
+        let mut pattern = pattern.chars();
+
+        let mut path_char = path.next();
+        let mut pattern_char = pattern.next();
+
+        let params = ctx.create_table()?;
+
+        loop {
+            if path_char.is_none() && (pattern_char.is_none() || pattern_char == Some('*')) {
+                return Ok(params);
+            } else if path_char == pattern_char {
+                path_char = path.next();
+                pattern_char = pattern.next();
+            } else if pattern_char == Some('*') {
+                pattern_char = pattern.next();
+                if pattern_char.is_none() {
+                    return Ok(params);
+                }
+                while path_char != pattern_char {
+                    path_char = path.next();
+                    if path_char.is_none() {
+                        return Ok(params);
+                    }
+                }
+            } else if pattern_char == Some('{') {
+                pattern_char = pattern.next();
+                let mut param_name = String::new();
+                while pattern_char != Some('}') {
+                    param_name.push(pattern_char.unwrap());
+                    pattern_char = pattern.next();
+                }
+                println!("param_name: {}", param_name);
+                pattern_char = pattern.next();
+                let mut param_value = String::new();
+                while path_char != Some('/') && path_char.is_some() {
+                    param_value.push(path_char.unwrap());
+                    path_char = path.next();
+                }
+                params.set(param_name, param_value)?;
+                if path_char.is_none() {
+                    return Ok(params);
+                }
+            } else {
+                return Ok(params);
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use rlua::Lua;
+
+        #[test]
+        fn url_matches() {
+            let cases = vec![
+                ("/", "/", true),
+                ("/*/", "/abc/", true),
+                ("/a/*/c", "/a/b/c", true),
+                ("/a/*/c", "/a/b/c/d", false),
+                ("/a/*/c", "/a/b", false),
+                ("/a/*/c", "/a/f/c/d", false),
+                ("/a", "/a", true),
+                ("/a", "/b", false),
+                ("/{name}", "/a", true),
+                ("/{name}", "/a/b", false),
+                ("/{name}/b", "/a/b", true),
+                ("/{name}/b", "/a/c", false),
+                ("/{name}/b", "/a/b/c", false),
+            ];
+
+            let lua = Lua::new();
+
+            for (pattern, path, expected) in cases {
+                let res: bool = lua
+                    .context(|ctx| super::url_matches(ctx, (pattern.to_string(), path.to_string())))
+                    .unwrap();
+                if res != expected {
+                    if expected {
+                        panic!("expected {} to match {}", path, pattern);
+                    } else {
+                        panic!("expected {} to not match {}", path, pattern);
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn url_extract() {
+            let cases = vec![
+                ("/", "/", vec![]),
+                ("/{name}", "/a", vec![("name", "a")]),
+                ("/{name}/b", "/a/b", vec![("name", "a")]),
+                ("/{name}/b", "/a/c", vec![]),
+                ("/{name}/b", "/a/b/c", vec![]),
+                (
+                    "/{name}/b/{name2}",
+                    "/a/b/c",
+                    vec![("name", "a"), ("name2", "c")],
+                ),
+                (
+                    "/{name}/b/{name2}",
+                    "/a/b/c/d",
+                    vec![("name", "a"), ("name2", "c")],
+                ),
+                ("/{name}/b/{name2}", "/a/b", vec![("name", "a")]),
+                (
+                    "/{name}/b/{name2}",
+                    "/a/b/c/d/e",
+                    vec![("name", "a"), ("name2", "c")],
+                ),
+            ];
+
+            let lua = Lua::new();
+
+            for (pattern, path, expected) in cases {
+                lua.context(|ctx| {
+                    let res =
+                        super::url_extract(ctx, (pattern.to_string(), path.to_string())).unwrap();
+                    let mut res_vec = Vec::new();
+                    for pair in res.pairs::<String, String>() {
+                        let (key, value) = pair.unwrap();
+                        res_vec.push((key, value));
+                    }
+                    let equal = res_vec
+                        .iter()
+                        .zip(expected.iter())
+                        .all(|((k1, v1), (k2, v2))| k1 == k2 && v1 == v2);
+                    if !equal {
+                        panic!(
+                            "expected {:?} to be {:?} for pattern {} and path {}",
+                            res_vec, expected, pattern, path
+                        );
+                    }
+                })
+            }
+        }
+    }
 }
