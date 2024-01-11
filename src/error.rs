@@ -4,16 +4,13 @@ use std::fmt::{self, Display, Formatter};
 pub enum LuaXError {
     InvalidStart, // used internally
     MissingField(String),
-    WrongFieldType(String),
     NonTableChildren,
+    NonTableAttrs,
     UnexpectedCharacter(char),
-    UnexpectedToken(String),
     NeededToken(String),
     ExpectedVar,
     ExpectedExpression,
     UnterminatedStringLiteral,
-    InvalidEscapeSequence(char),
-    InvalidAssignmentTarget,
 }
 
 impl std::error::Error for LuaXError {}
@@ -23,16 +20,13 @@ impl Display for LuaXError {
         match self {
             LuaXError::InvalidStart => write!(f, "Invalid start"),
             LuaXError::MissingField(field) => write!(f, "Missing required field: {}", field),
-            LuaXError::WrongFieldType(field) => write!(f, "Wrong field type: field {}", field),
             LuaXError::NonTableChildren => write!(f, "Children must be tables"),
+            LuaXError::NonTableAttrs => write!(f, "Attrs must be tables"),
             LuaXError::UnexpectedCharacter(c) => write!(f, "Unexpected character: '{}'", c),
-            LuaXError::UnexpectedToken(token) => write!(f, "Unexpected token: {}", token),
             LuaXError::NeededToken(token) => write!(f, "Needed token: {}", token),
             LuaXError::ExpectedVar => write!(f, "Expected variable"),
             LuaXError::ExpectedExpression => write!(f, "Expected expression"),
             LuaXError::UnterminatedStringLiteral => write!(f, "Unterminated string literal"),
-            LuaXError::InvalidEscapeSequence(c) => write!(f, "Invalid escape sequence: {}", c),
-            LuaXError::InvalidAssignmentTarget => write!(f, "Invalid assignment target"),
         }
     }
 }

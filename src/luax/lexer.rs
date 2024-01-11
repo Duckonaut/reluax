@@ -37,6 +37,8 @@ pub struct Lexer<'s> {
     current_pos_in_bytes: usize,
     // EOF
     emitted_eof: bool,
+    allow_unknowns: bool,
+    emit_whitespace: bool,
 }
 
 #[derive(Debug)]
@@ -59,6 +61,8 @@ impl<'s> Lexer<'s> {
             current,
             current_pos_in_bytes: 0,
             emitted_eof: false,
+            allow_unknowns: false,
+            emit_whitespace: false,
         }
     }
 
@@ -69,7 +73,17 @@ impl<'s> Lexer<'s> {
             TokenizeResult::Some(token) => Ok(Some(token)),
             TokenizeResult::Error(error) => Err(error.into()),
             TokenizeResult::None => match self.current {
-                Some(c) => Err(LuaXError::UnexpectedCharacter(c).into()),
+                Some(c) => {
+                    if self.allow_unknowns {
+                        self.advance();
+                        match c {
+                            ' ' | '\t' | '\n' => Ok(Some(Token::Whitespace)),
+                            _ => Ok(Some(Token::Unknown(c))),
+                        }
+                    } else {
+                        Err(LuaXError::UnexpectedCharacter(c).into())
+                    }
+                }
                 None => {
                     if self.emitted_eof {
                         Ok(None)
@@ -81,9 +95,27 @@ impl<'s> Lexer<'s> {
             },
         }
     }
-    
+
+    pub fn allow_unknowns(&mut self) {
+        self.allow_unknowns = true;
+    }
+
+    pub fn disallow_unknowns(&mut self) {
+        self.allow_unknowns = false;
+    }
+
+    pub fn emit_whitespace(&mut self) {
+        self.emit_whitespace = true;
+    }
+
+    pub fn hide_whitespace(&mut self) {
+        self.emit_whitespace = false;
+    }
+
     fn lex(&mut self) -> TokenizeResult<'s> {
-        self.skip_whitespace();
+        if !self.emit_whitespace {
+            self.skip_whitespace();
+        }
 
         try_all_paths!(
             self.single_char_token(),
@@ -138,7 +170,6 @@ impl<'s> Lexer<'s> {
         try_all_paths!(
             self.single_char_token_case('+', Token::Plus),
             self.single_char_token_case('*', Token::Star),
-            self.single_char_token_case('/', Token::Slash),
             self.single_char_token_case('^', Token::Hat),
             self.single_char_token_case('%', Token::Percent),
             self.single_char_token_case('&', Token::Amp),
@@ -146,12 +177,10 @@ impl<'s> Lexer<'s> {
             self.single_char_token_case('#', Token::Hash),
             self.single_char_token_case('(', Token::OpenParen),
             self.single_char_token_case(')', Token::CloseParen),
-            self.single_char_token_case('{', Token::OpenBrace),
             self.single_char_token_case('}', Token::CloseBrace),
             self.single_char_token_case(']', Token::CloseBracket),
             self.single_char_token_case(';', Token::Semicolon),
             self.single_char_token_case(',', Token::Comma),
-            self.single_char_token_case('$', Token::Dollar),
         )
     }
 
@@ -202,9 +231,9 @@ impl<'s> Lexer<'s> {
         try_all_paths!(
             self.double_char_token_case_with_alts(
                 '<',
-                ['=', '<'],
+                ['=', '<', '/'],
                 Some(Token::Lt),
-                [Token::Le, Token::LtLt]
+                [Token::Le, Token::LtLt, Token::OpenClosingTag]
             ),
             self.double_char_token_case_with_alts(
                 '>',
@@ -212,6 +241,8 @@ impl<'s> Lexer<'s> {
                 Some(Token::Gt),
                 [Token::Ge, Token::GtGt]
             ),
+            self.double_char_token_case('{', '$', Some(Token::OpenBrace), Token::LuaStart),
+            self.double_char_token_case('$', '}', None, Token::LuaEnd),
             self.double_char_token_case('=', '=', Some(Token::Eq), Token::EqEq),
             self.double_char_token_case('~', '=', Some(Token::Tilde), Token::TildeEq),
             self.double_char_token_case('/', '/', Some(Token::Slash), Token::SlashSlash),
@@ -279,10 +310,9 @@ impl<'s> Lexer<'s> {
                 self.advance();
             }
         }
-
         let end = self.current_pos_in_bytes;
 
-        TokenizeResult::Some(Token::Number(self.src[start..end].parse().unwrap()))
+        TokenizeResult::Some(Token::Number(&self.src[start..end]))
     }
 
     fn string(&mut self) -> TokenizeResult<'s> {
@@ -301,6 +331,7 @@ impl<'s> Lexer<'s> {
         };
 
         let start = self.current_pos_in_bytes;
+        let mut finished = false;
 
         match ty {
             StringType::Single => {
@@ -309,6 +340,7 @@ impl<'s> Lexer<'s> {
                     if self.match_char('\\') {
                         escaped = true;
                     } else if self.match_char('\'') && !escaped {
+                        finished = true;
                         break;
                     } else {
                         escaped = false;
@@ -322,6 +354,7 @@ impl<'s> Lexer<'s> {
                     if self.match_char('\\') {
                         escaped = true;
                     } else if self.match_char('"') && !escaped {
+                        finished = true;
                         break;
                     } else {
                         escaped = false;
@@ -334,6 +367,7 @@ impl<'s> Lexer<'s> {
                 while self.current.is_some() {
                     if self.current == Some(']') {
                         if almost_close {
+                            finished = true;
                             break;
                         } else {
                             almost_close = true;
@@ -346,7 +380,7 @@ impl<'s> Lexer<'s> {
             }
         }
 
-        if self.current.is_none() {
+        if !finished {
             TokenizeResult::Error(LuaXError::UnterminatedStringLiteral)
         } else {
             let end = self.current_pos_in_bytes - 1;
@@ -400,8 +434,8 @@ impl<'s> Lexer<'s> {
     }
 
     fn advance(&mut self) -> Option<char> {
-        self.current = self.chars.next();
         self.current_pos_in_bytes += self.current.map_or(0, |c| c.len_utf8());
+        self.current = self.chars.next();
 
         self.current
     }

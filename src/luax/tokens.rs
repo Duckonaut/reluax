@@ -66,12 +66,17 @@ pub enum Token<'s> {
     Hash,
     Not,
     /// Containers
-    Number(f64),
+    Number(&'s str),
     String(&'s str, StringType),
     Identifier(&'s str),
 
-    Dollar,
+    // HTML extensions
+    OpenClosingTag,
+    LuaStart,
+    LuaEnd,
     Eof,
+    Unknown(char),
+    Whitespace,
 }
 
 impl std::fmt::Display for Token<'_> {
@@ -139,9 +144,13 @@ impl std::fmt::Display for Token<'_> {
                 StringType::DoubleBracket => write!(f, "[[{}]]", s),
             },
             Token::Identifier(s) => write!(f, "{}", s),
-            Token::Dollar => write!(f, "$"),
+            Token::OpenClosingTag => write!(f, "</"),
+            Token::LuaStart => write!(f, "{{$"),
+            Token::LuaEnd => write!(f, "$}}"),
 
             Token::Eof => write!(f, "EOF"),
+            Token::Unknown(c) => write!(f, "{}", c),
+            Token::Whitespace => write!(f, " "),
         }
     }
 }

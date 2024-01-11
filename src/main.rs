@@ -19,6 +19,7 @@ fn table_to_html<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result<()>
 
     write!(f, "<{}", type_name)?;
     let mut children = None;
+    let mut attrs = None;
     for pair in table.pairs::<String, rlua::Value>() {
         let (key, value) = pair?;
         if key == "tag" {
@@ -28,13 +29,19 @@ fn table_to_html<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result<()>
             children = Some(value);
             continue;
         }
-        match value {
-            rlua::Value::Nil => write!(f, " {}=\"\"", key)?,
-            rlua::Value::Boolean(b) => write!(f, " {}=\"{}\"", key, b)?,
-            rlua::Value::Integer(i) => write!(f, " {}=\"{}\"", key, i)?,
-            rlua::Value::Number(n) => write!(f, " {}=\"{}\"", key, n)?,
-            rlua::Value::String(s) => write!(f, " {}=\"{}\"", key, s.to_str()?)?,
-            _ => return Err(ReluaxError::LuaX(LuaXError::WrongFieldType(key)).into()),
+        if key == "attrs" {
+            attrs = Some(value);
+            continue;
+        }
+    }
+    if let Some(attrs) = attrs {
+        if let rlua::Value::Table(attrs) = attrs {
+            for pair in attrs.pairs::<String, rlua::String>() {
+                let (key, value) = pair?;
+                write!(f, " {}=\"{}\"", key, value.to_str()?)?;
+            }
+        } else {
+            return Err(ReluaxError::LuaX(LuaXError::NonTableAttrs).into());
         }
     }
     write!(f, ">")?;
@@ -93,7 +100,8 @@ async fn main() -> color_eyre::Result<()> {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             format!("{} is not a file", entry.display()),
-        ).into());
+        )
+        .into());
     }
 
     server::Server::serve(args.port).await?;

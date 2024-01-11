@@ -1,0 +1,11 @@
+return function()
+    return <html>
+        <head>
+            <title>Reluax</title>
+        </head>
+        <body>
+            <h1>Reluax Test</h1>
+            <p>Random number for you: {$ tostring(math.floor(math.random() * 100)) $}</p>
+        </body>
+    </html>
+end

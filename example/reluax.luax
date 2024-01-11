@@ -5,13 +5,17 @@ math.randomseed(os.time())
 local function route(path)
     if path == '/' then
         return index()
-    elseif path == '/goodbye' then
-        return "goodbye"
-    elseif path == '/random' then
-        return 'no more random'
     end
 
-    return nil
+    return <html>
+        <head>
+            <title>Error 404</title>
+        </head>
+        <body>
+            <h1>Error 404</h1>
+            <p>Page not found.</p>
+        </body>
+    </html>
 end
 
 return {

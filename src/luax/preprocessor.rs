@@ -73,24 +73,29 @@ pub struct Preprocessor<'s, W: Write> {
     lexer: Lexer<'s>,
     current: Token<'s>,
     out_stream: W,
+    first_token: bool,
 }
 
 impl<'s, W: Write> Preprocessor<'s, W> {
-    pub fn new(template: &'s str, mut out_stream: W) -> Result<Self> {
+    pub fn new(template: &'s str, out_stream: W) -> Result<Self> {
         let mut lexer = Lexer::new(template);
         let current = lexer.next_token()?.unwrap();
         Ok(Preprocessor {
             lexer,
             current,
             out_stream,
+            first_token: true,
         })
     }
 
     fn next_token(&mut self) -> Result<()> {
         if self.current != Token::Eof {
-            write!(self.out_stream, " {}", self.current)?;
+            if !self.first_token {
+                write!(self.out_stream, " ")?;
+            }
+            write!(self.out_stream, "{}", self.current)?;
+            self.first_token = false;
         }
-        println!("Current: {}", self.current);
         match self.lexer.next_token()? {
             Some(token) => {
                 self.current = token;
@@ -122,7 +127,6 @@ impl<'s, W: Write> Preprocessor<'s, W> {
         match self.lexer.next_token()? {
             Some(token) => {
                 self.current = token;
-                println!("Current: {}", token);
             }
             None => return Err(LuaXError::InvalidStart.into()),
         }
@@ -291,12 +295,6 @@ impl<'s, W: Write> Preprocessor<'s, W> {
                 Token::Comma,
                 LuaXError::NeededToken(Token::Comma.to_string()),
             )?;
-
-            require!(self.expression(), LuaXError::ExpectedExpression);
-
-            if self.match_token(Token::Comma)? {
-                require!(self.expression(), LuaXError::ExpectedExpression);
-            }
 
             require!(self.expression(), LuaXError::ExpectedExpression);
 
@@ -543,6 +541,10 @@ impl<'s, W: Write> Preprocessor<'s, W> {
         // } else if let Some(()) = optionally!(self.html_template()) {
         //     return Ok(());
 
+        self.continue_access_or_call()
+    }
+
+    fn continue_access_or_call(&mut self) -> Result<()> {
         loop {
             if self.match_token(Token::OpenBracket)? {
                 require!(self.expression(), LuaXError::ExpectedVar,);
@@ -656,7 +658,9 @@ impl<'s, W: Write> Preprocessor<'s, W> {
     }
 
     fn fieldlist(&mut self) -> Result<()> {
-        require!(self.field(), LuaXError::ExpectedExpression);
+        if optionally!(self.field()).is_none() {
+            return Ok(());
+        }
 
         loop {
             if !self.match_token(Token::Comma)? && !self.match_token(Token::Semicolon)? {
@@ -675,8 +679,11 @@ impl<'s, W: Write> Preprocessor<'s, W> {
 
     fn field(&mut self) -> Result<()> {
         if optionally!(self.identifier()).is_some() {
-            self.consume_token(Token::Eq, LuaXError::NeededToken(Token::Eq.to_string()))?;
-            require!(self.expression(), LuaXError::ExpectedExpression);
+            if self.match_token(Token::Eq)? {
+                require!(self.expression(), LuaXError::ExpectedExpression);
+            } else {
+                self.continue_access_or_call()?;
+            }
         } else if self.match_token(Token::OpenBracket)? {
             require!(self.expression(), LuaXError::ExpectedExpression);
             self.consume_token(
@@ -685,8 +692,8 @@ impl<'s, W: Write> Preprocessor<'s, W> {
             )?;
             self.consume_token(Token::Eq, LuaXError::NeededToken(Token::Eq.to_string()))?;
             require!(self.expression(), LuaXError::ExpectedExpression);
-        } else {
-            require!(self.expression(), LuaXError::ExpectedExpression);
+        } else if optionally!(self.expression()).is_none() {
+            return Err(LuaXError::InvalidStart.into());
         }
 
         Ok(())
@@ -782,12 +789,160 @@ impl<'s, W: Write> Preprocessor<'s, W> {
         }
     }
 
-    fn html_template(&mut self) -> Result<()> {
-        if self.match_token_silent(Token::Dollar)? {
-            write!(self.out_stream, " {{ 'dollar' }}")?;
-            Ok(())
+    fn html_string(&mut self) -> Result<String> {
+        if let Token::String(s, _) = self.current {
+            self.next_token_silent()?;
+            Ok(s.to_string())
         } else {
             Err(LuaXError::InvalidStart.into())
         }
+    }
+
+    fn html_identifier(&mut self) -> Result<String> {
+        if let Token::Identifier(s) = self.current {
+            self.next_token_silent()?;
+            Ok(s.to_string())
+        } else {
+            Err(LuaXError::InvalidStart.into())
+        }
+    }
+
+    fn html_template(&mut self) -> Result<()> {
+        if !self.match_token_silent(Token::Lt)? {
+            return Err(LuaXError::InvalidStart.into());
+        }
+
+        self.lexer.allow_unknowns();
+
+        let tag = require!(
+            self.html_identifier(),
+            LuaXError::NeededToken("identifier".to_string())
+        );
+
+        write!(self.out_stream, " {{ tag=\"{}\", ", tag)?;
+
+        self.html_attributes()?;
+
+        if self.match_token_silent(Token::Slash)? {
+            self.consume_token_silent(Token::Gt, LuaXError::NeededToken(Token::Gt.to_string()))?;
+            write!(self.out_stream, "children={{}} }}")?;
+            return Ok(());
+        }
+
+        self.consume_token_silent(Token::Gt, LuaXError::NeededToken(Token::Gt.to_string()))?;
+
+        self.html_children()?;
+
+        self.consume_token_silent(
+            Token::OpenClosingTag,
+            LuaXError::NeededToken(Token::OpenClosingTag.to_string()),
+        )?;
+
+        let closing_tag = require!(
+            self.html_identifier(),
+            LuaXError::NeededToken("identifier".to_string())
+        );
+
+        if closing_tag != tag {
+            return Err(LuaXError::InvalidStart.into());
+        }
+
+        self.consume_token_silent(Token::Gt, LuaXError::NeededToken(Token::Gt.to_string()))?;
+
+        write!(self.out_stream, " }}")?;
+
+        self.lexer.disallow_unknowns();
+
+        Ok(())
+    }
+
+    fn html_attributes(&mut self) -> Result<()> {
+        write!(self.out_stream, "attrs={{")?;
+        loop {
+            let key = optionally!(self.html_identifier());
+
+            if key.is_none() {
+                break;
+            }
+
+            let key = key.unwrap();
+
+            self.consume_token_silent(Token::Eq, LuaXError::NeededToken(Token::Eq.to_string()))?;
+
+            write!(self.out_stream, "{}=", key)?;
+
+            if self.match_token_silent(Token::OpenBrace)? {
+                require!(self.expression(), LuaXError::ExpectedExpression);
+                self.consume_token_silent(
+                    Token::CloseBrace,
+                    LuaXError::NeededToken(Token::CloseBrace.to_string()),
+                )?;
+            } else {
+                let value = require!(
+                    self.html_string(),
+                    LuaXError::NeededToken("string".to_string())
+                );
+
+                write!(self.out_stream, "\"{}\"", value)?;
+            }
+
+            write!(self.out_stream, ", ")?;
+        }
+        write!(self.out_stream, "}}, ")?;
+
+        Ok(())
+    }
+
+    fn html_children(&mut self) -> Result<()> {
+        write!(self.out_stream, "children={{")?;
+        loop {
+            if self.current == Token::OpenClosingTag {
+                break;
+            }
+            if self.match_token_silent(Token::LuaStart)? {
+                self.lexer.disallow_unknowns();
+                require!(self.expression(), LuaXError::ExpectedExpression);
+                self.lexer.allow_unknowns();
+                self.consume_token_silent(
+                    Token::LuaEnd,
+                    LuaXError::NeededToken(Token::LuaEnd.to_string()),
+                )?;
+                write!(self.out_stream, ",")?;
+                continue;
+            }
+
+            if optionally!(self.html_template()).is_some() {
+                write!(self.out_stream, ",")?;
+                continue;
+            }
+
+            if self.current == Token::Lt
+                || self.current == Token::OpenClosingTag
+                || self.current == Token::LuaStart
+            {
+                break;
+            }
+
+            // handle plain HTML text, which can really be anything. Needs to become
+            // a string literal
+            write!(self.out_stream, " \"")?;
+            self.lexer.emit_whitespace();
+            loop {
+                if self.current == Token::Lt
+                    || self.current == Token::LuaStart
+                    || self.current == Token::OpenClosingTag
+                {
+                    break;
+                }
+                // all other tokens *should* be fine to just emit
+                write!(self.out_stream, "{}", self.current)?;
+                self.next_token_silent()?;
+            }
+            self.lexer.hide_whitespace();
+            write!(self.out_stream, "\",")?;
+        }
+        write!(self.out_stream, "}}")?;
+
+        Ok(())
     }
 }
