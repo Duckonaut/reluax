@@ -1,69 +1,11 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
-use color_eyre::Result;
-use error::{LuaXError, ReluaxError};
+use color_eyre::{owo_colors::OwoColorize, Result};
 
 mod error;
 mod luax;
 mod server;
-
-fn table_to_html<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result<()> {
-    let type_name: Option<String> = table.get("tag").unwrap();
-
-    if type_name.is_none() {
-        return Err(ReluaxError::LuaX(LuaXError::MissingField("tag".to_string())).into());
-    }
-
-    let type_name = type_name.unwrap();
-
-    write!(f, "<{}", type_name)?;
-    let mut children = None;
-    let mut attrs = None;
-    for pair in table.pairs::<String, rlua::Value>() {
-        let (key, value) = pair?;
-        if key == "tag" {
-            continue;
-        }
-        if key == "children" {
-            children = Some(value);
-            continue;
-        }
-        if key == "attrs" {
-            attrs = Some(value);
-            continue;
-        }
-    }
-    if let Some(attrs) = attrs {
-        if let rlua::Value::Table(attrs) = attrs {
-            for pair in attrs.pairs::<String, rlua::String>() {
-                let (key, value) = pair?;
-                write!(f, " {}=\"{}\"", key, value.to_str()?)?;
-            }
-        } else {
-            return Err(ReluaxError::LuaX(LuaXError::NonTableAttrs).into());
-        }
-    }
-    write!(f, ">")?;
-
-    if let Some(children) = children {
-        if let rlua::Value::Table(children) = children {
-            for child in children.sequence_values::<rlua::Value>() {
-                match child? {
-                    rlua::Value::Table(child) => table_to_html(child, f)?,
-                    rlua::Value::String(s) => write!(f, "{}", s.to_str()?)?,
-                    _ => return Err(ReluaxError::LuaX(LuaXError::NonTableChildren).into()),
-                }
-            }
-        } else {
-            return Err(ReluaxError::LuaX(LuaXError::NonTableChildren).into());
-        }
-    }
-
-    write!(f, "</{}>", type_name)?;
-
-    Ok(())
-}
 
 #[derive(Debug, Clone, clap::Parser)]
 struct Args {
@@ -71,6 +13,8 @@ struct Args {
     current_dir: std::path::PathBuf,
     #[clap(short = 'p', long = "port", default_value = "4310")]
     port: u16,
+    #[clap(short = 'l', long = "local", default_value = "false")]
+    local: bool,
 }
 
 #[tokio::main]
@@ -78,22 +22,86 @@ async fn main() -> color_eyre::Result<()> {
     color_eyre::install().unwrap();
     let args = Args::parse();
 
-    let current_dir = args.current_dir;
-
-    if !current_dir.is_dir() {
+    if !args.current_dir.is_dir() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("{} is not a directory", current_dir.display()),
+            format!("{} is not a directory", args.current_dir.display()),
         )
         .into());
     }
 
-    std::env::set_current_dir(current_dir)?;
+    println!(
+        "🌴 Project root: {}",
+        args.current_dir.display().bright_yellow()
+    );
 
-    luax::preprocess_dir(std::env::current_dir()?.as_path())?;
+    if args.local {
+        local(args).await
+    } else {
+        temp(args).await
+    }
+}
 
-    println!("⛱️  Reluax files preprocessed!");
+async fn local(args: Args) -> Result<()> {
+    println!("🌴 Running in local mode");
+    std::env::set_current_dir(&args.current_dir)?;
+    preprocess_current_dir().await?;
 
+    ensure_entry_point().await?;
+
+    serve(args).await
+}
+
+async fn temp(args: Args) -> Result<()> {
+    // Create a /tmp/reluax-XXXXXX directory for the server to pre-process files in.
+    let tmp_dir = tempfile::Builder::new()
+        .prefix("reluax-")
+        .tempdir()
+        .unwrap();
+
+    if !tmp_dir.path().is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("{} is not a directory", tmp_dir.path().display()),
+        )
+        .into());
+    }
+    println!(
+        "⏲️  Created temporary directory {}",
+        tmp_dir.path().display().bright_blue()
+    );
+
+    println!(
+        "⏲️  Will serve from {}",
+        tmp_dir.path().display().bright_blue()
+    );
+
+    // copy all files from the current directory to the temporary directory recursively.
+    let copied = recurse_copy(&args.current_dir, tmp_dir.path())?;
+
+    println!("⏲️  {} files copied", copied.bright_green());
+
+    std::env::set_current_dir(tmp_dir.path())?;
+
+    preprocess_current_dir().await?;
+
+    ensure_entry_point().await?;
+
+    serve(args).await
+}
+
+async fn preprocess_current_dir() -> Result<()> {
+    let preprocessed = luax::preprocess_dir(std::env::current_dir()?.as_path())?;
+
+    println!(
+        "⛱️  {} Reluax files preprocessed!",
+        preprocessed.bright_green()
+    );
+
+    Ok(())
+}
+
+async fn ensure_entry_point() -> Result<()> {
     let entry = PathBuf::from("reluax.lua");
 
     if !entry.is_file() {
@@ -104,7 +112,29 @@ async fn main() -> color_eyre::Result<()> {
         .into());
     }
 
-    server::Server::serve(args.port).await?;
-
     Ok(())
+}
+
+async fn serve(args: Args) -> Result<()> {
+    server::Server::serve(args.port).await
+}
+
+fn recurse_copy(from: &Path, to: &Path) -> Result<usize> {
+    let mut copied = 0;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_name = path.file_name().unwrap();
+        let to = to.join(file_name);
+
+        if path.is_dir() {
+            std::fs::create_dir(&to)?;
+            copied += recurse_copy(&path, &to)?;
+        } else {
+            std::fs::copy(&path, &to)?;
+            copied += 1;
+        }
+    }
+
+    Ok(copied)
 }

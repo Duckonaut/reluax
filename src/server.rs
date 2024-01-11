@@ -12,10 +12,12 @@ use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
 use crate::error::ReluaxError;
-use crate::{table_to_html, Result};
+use crate::luax::table_to_html;
+use color_eyre::Result;
 use rlua::Lua;
 
 pub struct Server {
+    port: u16,
     lua: Arc<Mutex<Lua>>,
 }
 
@@ -23,20 +25,17 @@ struct State {
     lua: Arc<Mutex<Lua>>,
 }
 
-static PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
-
 impl Server {
     pub async fn serve(port: u16) -> Result<()> {
-        PORT.set(port).unwrap();
-
         let server = Self {
+            port,
             lua: Arc::new(Mutex::new(Lua::new())),
         };
         server.start().await
     }
 
     async fn start(self) -> Result<()> {
-        let addr = SocketAddr::from(([127, 0, 0, 1], *PORT.get().unwrap()));
+        let addr = SocketAddr::from(([127, 0, 0, 1], self.port));
         let listener = TcpListener::bind(addr).await?;
 
         loop {
