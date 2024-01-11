@@ -6,6 +6,9 @@ return function()
         <body>
             <h1>Reluax Test</h1>
             <p>Random number for you: {$ tostring(math.floor(math.random() * 100)) $}</p>
+            <p style={ "font-size: " .. tostring(math.floor(math.random() * 100)) .. 'px' }>
+                What font size is this?
+            </p>
         </body>
     </html>
 end
