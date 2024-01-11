@@ -116,7 +116,10 @@ async fn ensure_entry_point() -> Result<()> {
 }
 
 async fn serve(args: Args) -> Result<()> {
-    server::Server::serve(args.port).await
+    println!("📦 Building Lua state...");
+    let lua = luax::prepare_lua()?;
+    println!("🛫 Starting server...");
+    server::Server::serve(lua, args.port).await
 }
 
 fn recurse_copy(from: &Path, to: &Path) -> Result<usize> {

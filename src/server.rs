@@ -7,7 +7,7 @@ use http_body_util::Full;
 use hyper::body::{Bytes, Incoming};
 use hyper::server::conn::http1;
 use hyper::service::Service;
-use hyper::{Request, Response};
+use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
@@ -26,10 +26,10 @@ struct State {
 }
 
 impl Server {
-    pub async fn serve(port: u16) -> Result<()> {
+    pub async fn serve(lua: Lua, port: u16) -> Result<()> {
         let server = Self {
             port,
-            lua: Arc::new(Mutex::new(Lua::new())),
+            lua: Arc::new(Mutex::new(lua)),
         };
         server.start().await
     }
@@ -45,18 +45,18 @@ impl Server {
                 lua: self.lua.clone(),
             };
             tokio::task::spawn(async move {
-                tokio::task::spawn(async move {
-                    if let Err(err) = http1::Builder::new().serve_connection(io, state).await {
-                        println!("Failed to serve connection: {:?}", err);
-                    }
-                });
+                if let Err(err) = http1::Builder::new().serve_connection(io, state).await {
+                    println!("Failed to serve connection: {:?}", err);
+                }
             });
         }
     }
 }
 
-fn mk_response(s: String) -> Result<Response<Full<Bytes>>> {
-    Ok(Response::builder().body(Full::new(Bytes::from(s))).unwrap())
+fn mk_response(status: StatusCode, s: String) -> Result<Response<Full<Bytes>>> {
+    Ok(Response::builder()
+        .status(status)
+        .body(Full::new(Bytes::from(s)))?)
 }
 
 impl Service<Request<Incoming>> for State {
@@ -67,33 +67,39 @@ impl Service<Request<Incoming>> for State {
 
     fn call(&self, req: Request<Incoming>) -> Self::Future {
         let path = req.uri().path();
-        let res = self.serve(path).map(mk_response).unwrap_or_else(|err| {
-            println!("Error: {}", err);
-            Err(err)
-        });
+        let res = self
+            .serve(path)
+            .map(|(st, s)| mk_response(st, s))
+            .unwrap_or_else(|err| {
+                println!("Error: {}", err);
+                Err(err)
+            });
 
         Box::pin(async { res })
     }
 }
 
 impl State {
-    fn serve(&self, path: &str) -> Result<String> {
+    fn serve(&self, path: &str) -> Result<(StatusCode, String)> {
         let lua = self.lua.lock().unwrap();
 
-        let res = lua.context(|ctx| -> Result<String> {
+        let res = lua.context(|ctx| -> Result<(StatusCode, String)> {
             let manifest: rlua::Table = ctx.load("require('reluax')").eval()?;
 
             let route: rlua::Function = manifest.get("route")?;
 
-            let res: rlua::Value = route.call((path,))?;
+            let res: (rlua::Integer, rlua::Value) = route.call((path,))?;
 
-            match res {
-                rlua::Value::String(s) => Ok(s.to_str()?.to_string()),
+            let status =
+                StatusCode::from_u16(res.0 as u16).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
+            match res.1 {
+                rlua::Value::String(s) => Ok((status, s.to_str()?.to_string())),
                 rlua::Value::Table(t) => {
                     let mut buf = Vec::new();
                     table_to_html(t, &mut buf)?;
                     let s = String::from_utf8(buf).unwrap();
-                    Ok(s)
+                    Ok((status, s))
                 }
                 rlua::Value::Nil => Err(ReluaxError::Server("No route found".to_string()).into()),
                 rlua::Value::Error(e) => Err(ReluaxError::Lua(e).into()),

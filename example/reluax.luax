@@ -4,10 +4,10 @@ math.randomseed(os.time())
 
 local function route(path)
     if path == '/' then
-        return index()
+        return 200, index()
     end
 
-    return <html>
+    return 404, <html>
         <head>
             <title>Error 404</title>
         </head>

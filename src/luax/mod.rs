@@ -1,3 +1,5 @@
+use rlua::Lua;
+
 use crate::{error::LuaXError, Result};
 
 mod lexer;
@@ -96,4 +98,10 @@ pub fn preprocess_dir(path: &std::path::Path) -> Result<usize> {
     }
 
     Ok(preprocessed)
+}
+
+pub fn prepare_lua() -> Result<Lua> {
+    let lua = Lua::new();
+
+    Ok(lua)
 }
