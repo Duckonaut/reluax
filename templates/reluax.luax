@@ -1,0 +1,24 @@
+local Index = require("index")
+
+math.randomseed(os.time())
+
+local function route(path)
+    if path == '/' then
+        return 200, <Index />
+    end
+
+    return 404, <html>
+        <head>
+            <title>Error 404</title>
+        </head>
+        <body>
+            <h1>Error 404</h1>
+            <p>Page not found.</p>
+        </body>
+    </html>
+end
+
+return {
+    route = route
+}
+

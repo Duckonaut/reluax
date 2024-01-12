@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use rlua::Lua;
 
 use crate::{error::LuaXError, Result};
@@ -91,13 +93,24 @@ pub fn preprocess(s: &str) -> Result<String> {
     Ok(s)
 }
 
-pub fn preprocess_dir(path: &std::path::Path) -> Result<usize> {
+pub fn preprocess_dir(path: &Path, output_path: &Path) -> Result<usize> {
     let mut preprocessed = 0;
     for entry in std::fs::read_dir(path)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            preprocessed += preprocess_dir(&path)?;
+            let output_dir = output_path.join(path.file_name().unwrap());
+            if !output_dir.is_dir() && output_dir.exists() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    format!("{} already exists", output_dir.display()),
+                )
+                .into());
+            }
+            if !output_dir.exists() {
+                std::fs::create_dir(&output_dir)?;
+            }
+            preprocessed += preprocess_dir(&path, &output_path.join(path.file_name().unwrap()))?;
         } else {
             if path.extension().unwrap_or_default() != "luax" {
                 continue;
@@ -105,7 +118,9 @@ pub fn preprocess_dir(path: &std::path::Path) -> Result<usize> {
             let s = std::fs::read_to_string(&path)?;
             let s = preprocess(&s)?;
 
-            let out_path = path.with_extension("lua");
+            let out_path = output_path
+                .join(path.file_name().unwrap())
+                .with_extension("lua");
 
             std::fs::write(out_path, s)?;
             preprocessed += 1;

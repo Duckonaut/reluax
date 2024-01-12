@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use clap::Parser;
 use color_eyre::{owo_colors::OwoColorize, Result};
@@ -8,68 +11,189 @@ mod luax;
 mod server;
 
 #[derive(Debug, Clone, clap::Parser)]
-struct Args {
-    #[clap(short = 'C', long = "current-dir", default_value = ".")]
-    current_dir: std::path::PathBuf,
-    #[clap(short = 'P', long = "public-dir", default_value = "public")]
-    public_dir: std::path::PathBuf,
-    #[clap(short = 'p', long = "port", default_value = "4310")]
-    port: u16,
-    #[clap(short = 'l', long = "local", default_value = "false")]
-    local: bool,
+#[clap(about = "⛱️  A LuaX web framework")]
+enum Args {
+    #[clap(
+        name = "serve",
+        about = "Serve a directory of LuaX files in production mode"
+    )]
+    Serve {
+        #[clap(
+            short = 'C',
+            long = "change-dir",
+            default_value = ".",
+            help = "The directory to serve LuaX files from"
+        )]
+        change_dir: std::path::PathBuf,
+        #[clap(
+            short = 'p',
+            long = "port",
+            default_value = "4310",
+            help = "The port to serve on"
+        )]
+        port: u16,
+        #[clap(
+            short = 'l',
+            long = "local",
+            default_value = "false",
+            help = "Do not use a temporary directory for preprocessing"
+        )]
+        local: bool,
+    },
+    #[clap(name = "build", about = "Build a directory of LuaX files")]
+    Build {
+        #[clap(
+            short = 'C',
+            long = "change-dir",
+            default_value = ".",
+            help = "The directory to build LuaX files from"
+        )]
+        change_dir: std::path::PathBuf,
+        #[clap(
+            short = 'o',
+            long = "output",
+            default_value = ".",
+            help = "The directory to output the built files to"
+        )]
+        output_dir: std::path::PathBuf,
+    },
+    #[clap(
+        name = "dev",
+        about = "Serve a directory of LuaX files in development mode"
+    )]
+    Dev {
+        #[clap(
+            short = 'C',
+            long = "change-dir",
+            default_value = ".",
+            help = "The directory to serve LuaX files from"
+        )]
+        change_dir: std::path::PathBuf,
+        #[clap(
+            short = 'P',
+            long = "public-dir",
+            help = "The static files directory to serve"
+        )]
+        public_dir: Option<std::path::PathBuf>,
+        #[clap(
+            short = 'p',
+            long = "port",
+            default_value = "4310",
+            help = "The port to serve on"
+        )]
+        port: u16,
+        #[clap(
+            short = 'l',
+            long = "local",
+            default_value = "false",
+            help = "Do not use a temporary directory for preprocessing"
+        )]
+        local: bool,
+    },
+    #[clap(name = "new", about = "Create a new project")]
+    New {
+        #[clap(help = "The name of the project")]
+        name: String,
+    },
+    #[clap(
+        name = "init",
+        about = "Initialize a new project in the current directory"
+    )]
+    Init,
 }
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install().unwrap();
-    let mut args = Args::parse();
+    let args = Args::parse();
 
-    if !args.current_dir.is_dir() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("{} is not a directory", args.current_dir.display()),
-        )
-        .into());
-    }
+    match args {
+        Args::Serve {
+            change_dir,
+            port,
+            local,
+        } => {
+            if !change_dir.is_dir() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("{} is not a directory", change_dir.display()),
+                )
+                .into());
+            }
 
-    println!(
-        "🌴 Project root: {}",
-        args.current_dir.display().bright_yellow()
-    );
+            println!("🌴 Project root: {}", change_dir.display().bright_yellow());
 
-    if !args.public_dir.is_dir() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("{} is not a directory", args.public_dir.display()),
-        )
-        .into());
-    }
+            if local {
+                serve_locally(change_dir, port, None).await
+            } else {
+                serve_from_temp(change_dir, port, None).await
+            }
+        }
+        Args::Build {
+            change_dir,
+            output_dir,
+        } => build(change_dir, output_dir),
+        Args::Dev {
+            change_dir,
+            public_dir,
+            port,
+            local,
+        } => {
+            if !change_dir.is_dir() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("{} is not a directory", change_dir.display()),
+                )
+                .into());
+            }
 
-    println!(
-        "🌴 Public directory: {}",
-        args.public_dir.display().bright_yellow()
-    );
+            println!("🌴 Project root: {}", change_dir.display().bright_yellow());
 
-    args.public_dir = args.public_dir.canonicalize()?;
+            let public_dir = if let Some(public_dir) = public_dir {
+                if !public_dir.is_dir() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("{} is not a directory", public_dir.display()),
+                    )
+                    .into());
+                }
 
-    if args.local {
-        local(args).await
-    } else {
-        temp(args).await
+                println!(
+                    "🌴 Public directory: {}",
+                    public_dir.display().bright_yellow()
+                );
+                Some(public_dir.canonicalize()?)
+            } else {
+                println!("🌴 Public directory: {}", "none".bright_yellow());
+                None
+            };
+
+            if local {
+                serve_locally(change_dir, port, public_dir).await
+            } else {
+                serve_from_temp(change_dir, port, public_dir).await
+            }
+        }
+        Args::New { name } => create_project(&name),
+        Args::Init => init_project(),
     }
 }
 
-async fn local(args: Args) -> Result<()> {
+async fn serve_locally(change_dir: PathBuf, port: u16, public_dir: Option<PathBuf>) -> Result<()> {
     println!("🌴 Running in local mode");
-    std::env::set_current_dir(&args.current_dir)?;
+    std::env::set_current_dir(&change_dir)?;
     preprocess_current_dir().await?;
 
     ensure_entry_point().await?;
 
-    serve(args).await
+    serve(port, public_dir).await
 }
 
-async fn temp(args: Args) -> Result<()> {
+async fn serve_from_temp(
+    change_dir: PathBuf,
+    port: u16,
+    public_dir: Option<PathBuf>,
+) -> Result<()> {
     // Create a /tmp/reluax-XXXXXX directory for the server to pre-process files in.
     let tmp_dir = tempfile::Builder::new()
         .prefix("reluax-")
@@ -94,7 +218,7 @@ async fn temp(args: Args) -> Result<()> {
     );
 
     // copy all files from the current directory to the temporary directory recursively.
-    let copied = recurse_copy(&args.current_dir, tmp_dir.path())?;
+    let copied = recurse_copy(&change_dir, tmp_dir.path())?;
 
     println!("⏲️  {} files copied", copied.bright_green());
 
@@ -104,11 +228,12 @@ async fn temp(args: Args) -> Result<()> {
 
     ensure_entry_point().await?;
 
-    serve(args).await
+    serve(port, public_dir).await
 }
 
 async fn preprocess_current_dir() -> Result<()> {
-    let preprocessed = luax::preprocess_dir(std::env::current_dir()?.as_path())?;
+    let current_dir = std::env::current_dir()?;
+    let preprocessed = luax::preprocess_dir(current_dir.as_path(), current_dir.as_path())?;
 
     println!(
         "⛱️  {} Reluax files preprocessed!",
@@ -132,11 +257,11 @@ async fn ensure_entry_point() -> Result<()> {
     Ok(())
 }
 
-async fn serve(args: Args) -> Result<()> {
+async fn serve(port: u16, public_dir: Option<PathBuf>) -> Result<()> {
     println!("📦 Building Lua state...");
     let lua = luax::prepare_lua()?;
-    println!("🛫 Starting server...");
-    server::Server::serve(lua, args.port, args.public_dir).await
+    println!("🛫 Starting server on port {}...", port);
+    server::Server::serve(lua, port, public_dir).await
 }
 
 fn recurse_copy(from: &Path, to: &Path) -> Result<usize> {
@@ -157,4 +282,89 @@ fn recurse_copy(from: &Path, to: &Path) -> Result<usize> {
     }
 
     Ok(copied)
+}
+
+fn create_project(name: &str) -> Result<()> {
+    let dir = PathBuf::from(name);
+
+    if dir.is_dir() {
+        println!("🛑 Directory {} already exists", dir.display().bright_red());
+        return Ok(());
+    }
+
+    std::fs::create_dir(&dir)?;
+
+    std::env::set_current_dir(&dir)?;
+
+    write_templates(name)?;
+
+    println!("🌴 Created project {}", name.bright_yellow());
+
+    Ok(())
+}
+
+fn init_project() -> Result<()> {
+    let dir = std::env::current_dir()?;
+
+    if !dir.is_dir() {
+        println!("🛑 Directory {} does not exist", dir.display().bright_red());
+        return Ok(());
+    }
+
+    let name = dir.file_name().unwrap().to_str().unwrap();
+
+    write_templates(name)?;
+
+    println!("🌴 Initialized project {}", name.bright_yellow());
+
+    Ok(())
+}
+
+fn write_templates(name: &str) -> Result<()> {
+    let mut file = std::fs::File::create("reluax.luax")?;
+    file.write_all(
+        include_str!("../templates/reluax.luax")
+            .replace("PROJECT_NAME", name)
+            .as_bytes(),
+    )?;
+
+    let mut file = std::fs::File::create("index.luax")?;
+    file.write_all(
+        include_str!("../templates/index.luax")
+            .replace("PROJECT_NAME", name)
+            .as_bytes(),
+    )?;
+
+    Ok(())
+}
+
+fn build(change_dir: PathBuf, output_dir: PathBuf) -> Result<()> {
+    if !change_dir.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("{} is not a directory", change_dir.display()),
+        )
+        .into());
+    }
+
+    println!("🌴 Project root: {}", change_dir.display().bright_yellow());
+
+    if !output_dir.is_dir() {
+        std::fs::create_dir(&output_dir)?;
+    }
+
+    println!(
+        "🌴 Output directory: {}",
+        output_dir.display().bright_yellow()
+    );
+
+    std::env::set_current_dir(&change_dir)?;
+
+    println!("📦 Preprocessing LuaX files...");
+
+    let built = luax::preprocess_dir(&change_dir, &output_dir)?;
+
+    println!("📦 {} LuaX files preprocessed!", built.bright_green());
+
+    Ok(())
 }

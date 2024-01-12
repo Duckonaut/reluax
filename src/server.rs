@@ -26,11 +26,11 @@ pub struct Server {
 #[derive(Clone)]
 struct State {
     lua: Arc<Mutex<Lua>>,
-    public_dir: PathBuf,
+    public_dir: Option<PathBuf>,
 }
 
 impl Server {
-    pub async fn serve(lua: Lua, port: u16, public_dir: PathBuf) -> Result<()> {
+    pub async fn serve(lua: Lua, port: u16, public_dir: Option<PathBuf>) -> Result<()> {
         let state = State {
             lua: Arc::new(Mutex::new(lua)),
             public_dir,
@@ -140,9 +140,13 @@ impl State {
             let status =
                 StatusCode::from_u16(res.0 as u16).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
-            if status == StatusCode::NOT_FOUND {
+            if status == StatusCode::NOT_FOUND && self.public_dir.is_some() {
                 // try to serve a static file
-                let path = self.public_dir.join(path.trim_start_matches('/'));
+                let path = self
+                    .public_dir
+                    .clone()
+                    .unwrap()
+                    .join(path.trim_start_matches('/'));
 
                 if path.is_file() {
                     return mk_file_response(path);

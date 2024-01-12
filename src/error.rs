@@ -5,7 +5,6 @@ pub enum LuaXError {
     InvalidStart, // used internally
     NonTableChildren,
     NonTableAttrs,
-    UnexpectedCharacter(char),
     NeededToken(String),
     ExpectedVar,
     ExpectedExpression,
@@ -20,7 +19,6 @@ impl Display for LuaXError {
             LuaXError::InvalidStart => write!(f, "Invalid start"),
             LuaXError::NonTableChildren => write!(f, "Children must be tables"),
             LuaXError::NonTableAttrs => write!(f, "Attrs must be tables"),
-            LuaXError::UnexpectedCharacter(c) => write!(f, "Unexpected character: '{}'", c),
             LuaXError::NeededToken(token) => write!(f, "Needed token: {}", token),
             LuaXError::ExpectedVar => write!(f, "Expected variable"),
             LuaXError::ExpectedExpression => write!(f, "Expected expression"),

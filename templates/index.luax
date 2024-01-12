@@ -1,0 +1,14 @@
+return function()
+    return <html>
+        <head>
+            <title>PROJECT_NAME</title>
+        </head>
+        <body>
+            <h1>PROJECT_NAME</h1>
+            <p>Random number for you: {$ tostring(math.floor(math.random() * 100)) $}</p>
+            <p style={ "font-size: " .. tostring(math.floor(math.random() * 100)) .. 'px' }>
+                What font size is this?
+            </p>
+        </body>
+    </html>
+end
