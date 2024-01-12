@@ -102,7 +102,7 @@ impl<'s> Lexer<'s> {
                 TokenizeResult::Some(token) => Ok(Some(token)),
                 TokenizeResult::Error(error) => Err(error.into()),
                 TokenizeResult::None => match self.current {
-                    Some(c) => Err(LuaXError::UnexpectedCharacter(c).into()),
+                    Some(c) => Ok(Some(Token::Unknown(c))),
                     None => {
                         if self.emitted_eof {
                             Ok(None)

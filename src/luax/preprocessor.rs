@@ -873,17 +873,7 @@ impl<'s, W: Write> Preprocessor<'s, W> {
         }
 
         // there might be an invalid token immediately after the tag name
-        match self.consume_token_silent(Token::Gt, LuaXError::NeededToken(Token::Gt.to_string())) {
-            Ok(()) => {}
-            Err(e) => match e.downcast_ref::<LuaXError>() {
-                Some(LuaXError::UnexpectedCharacter(_)) => {
-                    self.lexer.enable_html_text_mode();
-                    self.next_token_silent()?;
-                    self.lexer.disable_html_text_mode();
-                },
-                _ => return Err(e),
-            },
-        }
+        self.consume_token_silent(Token::Gt, LuaXError::NeededToken(Token::Gt.to_string()))?;
 
         self.html_children()?;
 
@@ -973,7 +963,6 @@ impl<'s, W: Write> Preprocessor<'s, W> {
                 Ok(t) => Some(t),
                 Err(e) => match e.downcast_ref::<LuaXError>() {
                     Some(LuaXError::InvalidStart) => None,
-                    Some(LuaXError::UnexpectedCharacter(_)) => None,
                     _ => return Err(e),
                 },
             }
@@ -995,6 +984,9 @@ impl<'s, W: Write> Preprocessor<'s, W> {
             write!(self.out_stream, " \"")?;
             self.lexer.enable_html_text_mode();
             loop {
+                if matches!(self.current, Token::Unknown(_)) {
+                    self.next_token_silent()?;
+                }
                 if self.current == Token::Lt
                     || self.current == Token::LuaStart
                     || self.current == Token::OpenClosingTag

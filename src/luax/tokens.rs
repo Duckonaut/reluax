@@ -77,6 +77,7 @@ pub enum Token<'s> {
     LuaEnd,
     Eof,
     HtmlTextChar(char),
+    Unknown(char),
     Whitespace,
 }
 
@@ -152,6 +153,7 @@ impl std::fmt::Display for Token<'_> {
             Token::Bang => write!(f, "!"),
             Token::Eof => write!(f, "EOF"),
             Token::HtmlTextChar(c) => write!(f, "{}", c),
+            Token::Unknown(c) => write!(f, "{}", c),
             Token::Whitespace => write!(f, " "),
         }
     }
