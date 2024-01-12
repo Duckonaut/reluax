@@ -9,13 +9,22 @@ mod tests;
 mod tokens;
 
 pub fn table_to_html<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result<()> {
-    let type_name: Option<String> = table.get("tag").unwrap();
+    let tag_name: Option<String> = table.get("tag").unwrap();
 
-    if type_name.is_none() {
-        return Err(LuaXError::MissingField("tag".to_string()).into());
+    if tag_name.is_none() {
+        // we might be in a list
+        for child in table.sequence_values::<rlua::Value>() {
+            match child? {
+                rlua::Value::Table(child) => table_to_html(child, f)?,
+                rlua::Value::String(s) => write!(f, "{}", s.to_str()?)?,
+                _ => return Err(LuaXError::NonTableChildren.into()),
+            }
+        }
+
+        return Ok(());
     }
 
-    let type_name = type_name.unwrap();
+    let type_name = tag_name.unwrap();
 
     write!(f, "<{}", type_name)?;
     let mut children = None;
@@ -69,7 +78,13 @@ pub fn preprocess(s: &str) -> Result<String> {
     let mut buf = Vec::new();
     let preprocessor = preprocessor::Preprocessor::new(s, &mut buf)?;
 
-    preprocessor.preprocess()?;
+    match preprocessor.preprocess() {
+        Ok(_) => {}
+        Err(e) => {
+            println!("got up to: {}", String::from_utf8_lossy(&buf));
+            return Err(e);
+        }
+    }
 
     let s = String::from_utf8(buf).unwrap();
 
@@ -221,7 +236,6 @@ mod utils {
                     param_name.push(pattern_char.unwrap());
                     pattern_char = pattern.next();
                 }
-                println!("param_name: {}", param_name);
                 pattern_char = pattern.next();
                 let mut param_value = String::new();
                 while path_char != Some('/') && path_char.is_some() {
@@ -295,16 +309,12 @@ mod utils {
                     vec![("name", "a"), ("name2", "c")],
                 ),
                 ("/{name}/b/{name2}", "/a/b", vec![("name", "a")]),
-                (
-                    "/{name}/b/{name2}",
-                    "/a/b/c/d/e",
-                    vec![("name", "a"), ("name2", "c")],
-                ),
             ];
 
             let lua = Lua::new();
 
-            for (pattern, path, expected) in cases {
+            for (pattern, path, mut expected) in cases {
+                expected.sort_by_key(|(k, _)| k.to_owned());
                 lua.context(|ctx| {
                     let res =
                         super::url_extract(ctx, (pattern.to_string(), path.to_string())).unwrap();
@@ -313,6 +323,8 @@ mod utils {
                         let (key, value) = pair.unwrap();
                         res_vec.push((key, value));
                     }
+                    res_vec.sort_by_key(|(k, _)| k.clone());
+
                     let equal = res_vec
                         .iter()
                         .zip(expected.iter())

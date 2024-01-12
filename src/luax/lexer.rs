@@ -37,8 +37,7 @@ pub struct Lexer<'s> {
     current_pos_in_bytes: usize,
     // EOF
     emitted_eof: bool,
-    allow_unknowns: bool,
-    emit_whitespace: bool,
+    html_text_mode: usize,
 }
 
 #[derive(Debug)]
@@ -61,29 +60,32 @@ impl<'s> Lexer<'s> {
             current,
             current_pos_in_bytes: 0,
             emitted_eof: false,
-            allow_unknowns: false,
-            emit_whitespace: false,
+            html_text_mode: 0,
         }
     }
 
     pub fn next_token(&mut self) -> Result<Option<Token<'s>>> {
-        let token = self.lex();
+        if self.html_text_mode > 0 {
+            let c = self.current;
+            self.advance();
 
-        match token {
-            TokenizeResult::Some(token) => Ok(Some(token)),
-            TokenizeResult::Error(error) => Err(error.into()),
-            TokenizeResult::None => match self.current {
-                Some(c) => {
-                    if self.allow_unknowns {
-                        self.advance();
-                        match c {
-                            ' ' | '\t' | '\n' => Ok(Some(Token::Whitespace)),
-                            _ => Ok(Some(Token::Unknown(c))),
-                        }
+            match c {
+                Some('<') => {
+                    if self.match_char('/') {
+                        Ok(Some(Token::OpenClosingTag))
                     } else {
-                        Err(LuaXError::UnexpectedCharacter(c).into())
+                        Ok(Some(Token::Lt))
                     }
                 }
+                Some(' ' | '\t' | '\n') => Ok(Some(Token::Whitespace)),
+                Some('{') => {
+                    if self.match_char('$') {
+                        Ok(Some(Token::LuaStart))
+                    } else {
+                        Ok(Some(Token::HtmlTextChar('{')))
+                    }
+                }
+                Some(c) => Ok(Some(Token::HtmlTextChar(c))),
                 None => {
                     if self.emitted_eof {
                         Ok(None)
@@ -92,30 +94,38 @@ impl<'s> Lexer<'s> {
                         Ok(Some(Token::Eof))
                     }
                 }
-            },
+            }
+        } else {
+            let token = self.lex();
+
+            match token {
+                TokenizeResult::Some(token) => Ok(Some(token)),
+                TokenizeResult::Error(error) => Err(error.into()),
+                TokenizeResult::None => match self.current {
+                    Some(c) => Err(LuaXError::UnexpectedCharacter(c).into()),
+                    None => {
+                        if self.emitted_eof {
+                            Ok(None)
+                        } else {
+                            self.emitted_eof = true;
+                            Ok(Some(Token::Eof))
+                        }
+                    }
+                },
+            }
         }
     }
 
-    pub fn allow_unknowns(&mut self) {
-        self.allow_unknowns = true;
+    pub fn enable_html_text_mode(&mut self) {
+        self.html_text_mode += 1;
     }
 
-    pub fn disallow_unknowns(&mut self) {
-        self.allow_unknowns = false;
-    }
-
-    pub fn emit_whitespace(&mut self) {
-        self.emit_whitespace = true;
-    }
-
-    pub fn hide_whitespace(&mut self) {
-        self.emit_whitespace = false;
+    pub fn disable_html_text_mode(&mut self) {
+        self.html_text_mode -= 1;
     }
 
     fn lex(&mut self) -> TokenizeResult<'s> {
-        if !self.emit_whitespace {
-            self.skip_whitespace();
-        }
+        self.skip_whitespace();
 
         try_all_paths!(
             self.single_char_token(),
@@ -181,6 +191,7 @@ impl<'s> Lexer<'s> {
             self.single_char_token_case(']', Token::CloseBracket),
             self.single_char_token_case(';', Token::Semicolon),
             self.single_char_token_case(',', Token::Comma),
+            self.single_char_token_case('!', Token::Bang),
         )
     }
 

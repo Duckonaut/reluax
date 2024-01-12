@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::sync::OnceLock;
 
 use crate::error::LuaXError;
 
@@ -799,12 +800,47 @@ impl<'s, W: Write> Preprocessor<'s, W> {
     }
 
     fn html_identifier(&mut self) -> Result<String> {
-        if let Token::Identifier(s) = self.current {
+        if let Token::Bang = self.current {
             self.next_token_silent()?;
+            let mut s = "!".to_string();
+            if let Token::Identifier(s2) = self.current {
+                s.push_str(s2);
+                self.next_token_silent()?;
+            }
+            Ok(s.to_string())
+        } else if let Token::Identifier(s) = self.current {
+            self.next_token_silent()?;
+            let mut s = s.to_string();
+            // we might have - in the identifier, so we loop until we don't
+            let mut last_was_id = true;
+            loop {
+                if let Token::Minus = self.current {
+                    s.push('-');
+                    self.next_token_silent()?;
+                    last_was_id = false;
+                } else if let Token::Identifier(s2) = self.current {
+                    if last_was_id {
+                        break;
+                    }
+                    s.push_str(s2);
+                    self.next_token_silent()?;
+                    last_was_id = true;
+                } else {
+                    break;
+                }
+            }
             Ok(s.to_string())
         } else {
             Err(LuaXError::InvalidStart.into())
         }
+    }
+
+    fn default_html_tag(tag: &str) -> bool {
+        static TAGS: OnceLock<Vec<&str>> = OnceLock::new();
+
+        let tags = TAGS.get_or_init(|| include_str!("default_html_tags.txt").split('\n').collect());
+
+        tags.contains(&tag)
     }
 
     fn html_template(&mut self) -> Result<()> {
@@ -812,24 +848,42 @@ impl<'s, W: Write> Preprocessor<'s, W> {
             return Err(LuaXError::InvalidStart.into());
         }
 
-        self.lexer.allow_unknowns();
-
         let tag = require!(
             self.html_identifier(),
             LuaXError::NeededToken("identifier".to_string())
         );
 
-        write!(self.out_stream, " {{ tag=\"{}\", ", tag)?;
+        if Self::default_html_tag(&tag) {
+            write!(self.out_stream, " {{ tag=\"{}\", ", tag)?;
+        } else {
+            write!(self.out_stream, " {} ({{ ", tag)?;
+        }
 
         self.html_attributes()?;
 
         if self.match_token_silent(Token::Slash)? {
             self.consume_token_silent(Token::Gt, LuaXError::NeededToken(Token::Gt.to_string()))?;
-            write!(self.out_stream, "children={{}} }}")?;
+            write!(self.out_stream, "children={{}}")?;
+            if Self::default_html_tag(&tag) {
+                write!(self.out_stream, " }}")?;
+            } else {
+                write!(self.out_stream, " }}) ")?;
+            }
             return Ok(());
         }
 
-        self.consume_token_silent(Token::Gt, LuaXError::NeededToken(Token::Gt.to_string()))?;
+        // there might be an invalid token immediately after the tag name
+        match self.consume_token_silent(Token::Gt, LuaXError::NeededToken(Token::Gt.to_string())) {
+            Ok(()) => {}
+            Err(e) => match e.downcast_ref::<LuaXError>() {
+                Some(LuaXError::UnexpectedCharacter(_)) => {
+                    self.lexer.enable_html_text_mode();
+                    self.next_token_silent()?;
+                    self.lexer.disable_html_text_mode();
+                },
+                _ => return Err(e),
+            },
+        }
 
         self.html_children()?;
 
@@ -849,9 +903,11 @@ impl<'s, W: Write> Preprocessor<'s, W> {
 
         self.consume_token_silent(Token::Gt, LuaXError::NeededToken(Token::Gt.to_string()))?;
 
-        write!(self.out_stream, " }}")?;
-
-        self.lexer.disallow_unknowns();
+        if Self::default_html_tag(&tag) {
+            write!(self.out_stream, " }}")?;
+        } else {
+            write!(self.out_stream, " }}) ")?;
+        }
 
         Ok(())
     }
@@ -869,7 +925,11 @@ impl<'s, W: Write> Preprocessor<'s, W> {
 
             self.consume_token_silent(Token::Eq, LuaXError::NeededToken(Token::Eq.to_string()))?;
 
-            write!(self.out_stream, "{}=", key)?;
+            if key.contains('-') {
+                write!(self.out_stream, "[\"{}\"]=", key)?;
+            } else {
+                write!(self.out_stream, "{}=", key)?;
+            }
 
             if self.match_token_silent(Token::OpenBrace)? {
                 require!(self.expression(), LuaXError::ExpectedExpression);
@@ -900,9 +960,7 @@ impl<'s, W: Write> Preprocessor<'s, W> {
                 break;
             }
             if self.match_token_silent(Token::LuaStart)? {
-                self.lexer.disallow_unknowns();
                 require!(self.expression(), LuaXError::ExpectedExpression);
-                self.lexer.allow_unknowns();
                 self.consume_token_silent(
                     Token::LuaEnd,
                     LuaXError::NeededToken(Token::LuaEnd.to_string()),
@@ -911,7 +969,16 @@ impl<'s, W: Write> Preprocessor<'s, W> {
                 continue;
             }
 
-            if optionally!(self.html_template()).is_some() {
+            if match self.html_template() {
+                Ok(t) => Some(t),
+                Err(e) => match e.downcast_ref::<LuaXError>() {
+                    Some(LuaXError::InvalidStart) => None,
+                    Some(LuaXError::UnexpectedCharacter(_)) => None,
+                    _ => return Err(e),
+                },
+            }
+            .is_some()
+            {
                 write!(self.out_stream, ",")?;
                 continue;
             }
@@ -926,7 +993,7 @@ impl<'s, W: Write> Preprocessor<'s, W> {
             // handle plain HTML text, which can really be anything. Needs to become
             // a string literal
             write!(self.out_stream, " \"")?;
-            self.lexer.emit_whitespace();
+            self.lexer.enable_html_text_mode();
             loop {
                 if self.current == Token::Lt
                     || self.current == Token::LuaStart
@@ -938,7 +1005,7 @@ impl<'s, W: Write> Preprocessor<'s, W> {
                 write!(self.out_stream, "{}", self.current)?;
                 self.next_token_silent()?;
             }
-            self.lexer.hide_whitespace();
+            self.lexer.disable_html_text_mode();
             write!(self.out_stream, "\",")?;
         }
         write!(self.out_stream, "}}")?;

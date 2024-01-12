@@ -11,6 +11,8 @@ mod server;
 struct Args {
     #[clap(short = 'C', long = "current-dir", default_value = ".")]
     current_dir: std::path::PathBuf,
+    #[clap(short = 'P', long = "public-dir", default_value = "public")]
+    public_dir: std::path::PathBuf,
     #[clap(short = 'p', long = "port", default_value = "4310")]
     port: u16,
     #[clap(short = 'l', long = "local", default_value = "false")]
@@ -20,7 +22,7 @@ struct Args {
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install().unwrap();
-    let args = Args::parse();
+    let mut args = Args::parse();
 
     if !args.current_dir.is_dir() {
         return Err(std::io::Error::new(
@@ -34,6 +36,21 @@ async fn main() -> color_eyre::Result<()> {
         "🌴 Project root: {}",
         args.current_dir.display().bright_yellow()
     );
+
+    if !args.public_dir.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("{} is not a directory", args.public_dir.display()),
+        )
+        .into());
+    }
+
+    println!(
+        "🌴 Public directory: {}",
+        args.public_dir.display().bright_yellow()
+    );
+
+    args.public_dir = args.public_dir.canonicalize()?;
 
     if args.local {
         local(args).await
@@ -72,7 +89,7 @@ async fn temp(args: Args) -> Result<()> {
     );
 
     println!(
-        "⏲️  Will serve from {}",
+        "⏲️  Will serve Lua from {}",
         tmp_dir.path().display().bright_blue()
     );
 
@@ -119,7 +136,7 @@ async fn serve(args: Args) -> Result<()> {
     println!("📦 Building Lua state...");
     let lua = luax::prepare_lua()?;
     println!("🛫 Starting server...");
-    server::Server::serve(lua, args.port).await
+    server::Server::serve(lua, args.port, args.public_dir).await
 }
 
 fn recurse_copy(from: &Path, to: &Path) -> Result<usize> {

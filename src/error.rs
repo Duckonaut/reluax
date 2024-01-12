@@ -3,7 +3,6 @@ use std::fmt::{self, Display, Formatter};
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum LuaXError {
     InvalidStart, // used internally
-    MissingField(String),
     NonTableChildren,
     NonTableAttrs,
     UnexpectedCharacter(char),
@@ -19,7 +18,6 @@ impl Display for LuaXError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             LuaXError::InvalidStart => write!(f, "Invalid start"),
-            LuaXError::MissingField(field) => write!(f, "Missing required field: {}", field),
             LuaXError::NonTableChildren => write!(f, "Children must be tables"),
             LuaXError::NonTableAttrs => write!(f, "Attrs must be tables"),
             LuaXError::UnexpectedCharacter(c) => write!(f, "Unexpected character: '{}'", c),

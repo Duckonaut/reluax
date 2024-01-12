@@ -71,11 +71,12 @@ pub enum Token<'s> {
     Identifier(&'s str),
 
     // HTML extensions
+    Bang,
     OpenClosingTag,
     LuaStart,
     LuaEnd,
     Eof,
-    Unknown(char),
+    HtmlTextChar(char),
     Whitespace,
 }
 
@@ -148,8 +149,9 @@ impl std::fmt::Display for Token<'_> {
             Token::LuaStart => write!(f, "{{$"),
             Token::LuaEnd => write!(f, "$}}"),
 
+            Token::Bang => write!(f, "!"),
             Token::Eof => write!(f, "EOF"),
-            Token::Unknown(c) => write!(f, "{}", c),
+            Token::HtmlTextChar(c) => write!(f, "{}", c),
             Token::Whitespace => write!(f, " "),
         }
     }

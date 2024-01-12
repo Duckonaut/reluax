@@ -34,7 +34,7 @@ fn compare_output(input: &str, expected: &str) -> Result<()> {
             .unwrap();
         println!(
             "first mismatch: index {}: {:?} != {:?}",
-            first_mismatch.0, first_mismatch.1.0, first_mismatch.1.1
+            first_mismatch.0, first_mismatch.1 .0, first_mismatch.1 .1
         );
         println!("expected: {}", expected);
         println!("output: {}", output);
@@ -194,5 +194,82 @@ fn site() -> Result<()> {
             } },
         } }
         "#,
+    )
+}
+
+#[test]
+fn html_with_code() -> Result<()> {
+    compare_output(
+        "return <div>{$ hello $}</div>",
+        "return { tag=\"div\", attrs={}, children={ hello,} }",
+    )
+}
+
+#[test]
+fn html_with_code_and_text() -> Result<()> {
+    compare_output(
+        "return <div>hello {$ world $}</div>",
+        "return { tag=\"div\", attrs={}, children={ \"hello \", world,} }",
+    )
+}
+
+#[test]
+fn function_returning_html() -> Result<()> {
+    compare_output(
+        "function hello() return <div></div> end",
+        "function hello ( ) return { tag=\"div\", attrs={}, children={} } end",
+    )
+}
+
+#[test]
+fn function_returning_nested_html() -> Result<()> {
+    compare_output(
+        "function hello() return <div><span></span></div> end",
+        "function hello ( ) return { tag=\"div\", attrs={}, children={ { tag=\"span\", attrs={}, children={} },} } end",
+    )
+}
+
+#[test]
+fn function_returning_nested_html_with_code() -> Result<()> {
+    compare_output(
+        "function hello() return <div>{$ world $}</div> end",
+        "function hello ( ) return { tag=\"div\", attrs={}, children={ world,} } end",
+    )
+}
+
+#[test]
+fn component() -> Result<()> {
+    compare_output("return <Hello />", "return Hello ({ attrs={}, children={} })")
+}
+
+#[test]
+fn component_with_attrs() -> Result<()> {
+    compare_output(
+        "return <Hello name=\"world\" />",
+        "return Hello ({ attrs={name=\"world\", }, children={} })",
+    )
+}
+
+#[test]
+fn component_with_children() -> Result<()> {
+    compare_output(
+        "return <Hello><span /></Hello>",
+        "return Hello ({ attrs={}, children={ { tag=\"span\", attrs={}, children={} },} })",
+    )
+}
+
+#[test]
+fn html_with_attrs_with_dash() -> Result<()> {
+    compare_output(
+        "return <div data-hello=\"world\"></div>",
+        "return { tag=\"div\", attrs={[\"data-hello\"]=\"world\", }, children={} }",
+    )
+}
+
+#[test]
+fn weird_symbols_in_html() -> Result<()> {
+    compare_output(
+        "return <div>@everyone</div>",
+        "return { tag=\"div\", attrs={}, children={ \"@everyone\",} }",
     )
 }
