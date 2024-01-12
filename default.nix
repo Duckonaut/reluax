@@ -39,6 +39,7 @@ naersk.lib."${targetPlatform.system}".buildPackage rec {
     homepage = cargoToml.package.homepage;
     license = with licenses; [ mit ];
     maintainers = with maintainers; [ ];
+    mainProgram = "reluax";
   };
 }
 
