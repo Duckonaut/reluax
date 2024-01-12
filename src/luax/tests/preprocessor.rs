@@ -239,7 +239,10 @@ fn function_returning_nested_html_with_code() -> Result<()> {
 
 #[test]
 fn component() -> Result<()> {
-    compare_output("return <Hello />", "return Hello ({ attrs={}, children={} })")
+    compare_output(
+        "return <Hello />",
+        "return Hello ({ attrs={}, children={} })",
+    )
 }
 
 #[test]
