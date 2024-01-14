@@ -1,3 +1,5 @@
+![logo](assets/logo.svg)
+
 # reluax
 `reluax` lets you easily create dynamic websites in a custom dialect of Lua,
 inspired by JSX. The service has been written in Rust, and uses `luajit` as
