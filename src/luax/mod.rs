@@ -130,7 +130,7 @@ pub fn preprocess_dir(path: &Path, output_path: &Path) -> Result<usize> {
     Ok(preprocessed)
 }
 
-pub fn prepare_lua() -> Result<Lua> {
+pub fn prepare_lua(dev_mode: bool) -> Result<Lua> {
     let lua = Lua::new();
 
     // create a table called "reluax" with common utility functions
@@ -142,6 +142,7 @@ pub fn prepare_lua() -> Result<Lua> {
         reluax.set("url_matches", url_matches)?;
         let url_extract = ctx.create_function(utils::url_extract)?;
         reluax.set("url_extract", url_extract)?;
+        reluax.set("dev_mode", dev_mode)?;
 
         ctx.globals().set("reluax", reluax)?;
 

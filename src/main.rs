@@ -124,9 +124,9 @@ async fn main() -> color_eyre::Result<()> {
             println!("🌴 Project root: {}", change_dir.display().bright_yellow());
 
             if local {
-                serve_locally(change_dir, port, None).await
+                serve_locally(change_dir, false, port, None).await
             } else {
-                serve_from_temp(change_dir, port, None).await
+                serve_from_temp(change_dir, false, port, None).await
             }
         }
         Args::Build {
@@ -169,9 +169,9 @@ async fn main() -> color_eyre::Result<()> {
             };
 
             if local {
-                serve_locally(change_dir, port, public_dir).await
+                serve_locally(change_dir, true, port, public_dir).await
             } else {
-                serve_from_temp(change_dir, port, public_dir).await
+                serve_from_temp(change_dir, true, port, public_dir).await
             }
         }
         Args::New { name } => create_project(&name),
@@ -179,18 +179,24 @@ async fn main() -> color_eyre::Result<()> {
     }
 }
 
-async fn serve_locally(change_dir: PathBuf, port: u16, public_dir: Option<PathBuf>) -> Result<()> {
+async fn serve_locally(
+    change_dir: PathBuf,
+    dev_mode: bool,
+    port: u16,
+    public_dir: Option<PathBuf>,
+) -> Result<()> {
     println!("🌴 Running in local mode");
     std::env::set_current_dir(&change_dir)?;
     preprocess_current_dir().await?;
 
     ensure_entry_point().await?;
 
-    serve(port, public_dir).await
+    serve(dev_mode, port, public_dir).await
 }
 
 async fn serve_from_temp(
     change_dir: PathBuf,
+    dev_mode: bool,
     port: u16,
     public_dir: Option<PathBuf>,
 ) -> Result<()> {
@@ -228,7 +234,7 @@ async fn serve_from_temp(
 
     ensure_entry_point().await?;
 
-    serve(port, public_dir).await
+    serve(dev_mode, port, public_dir).await
 }
 
 async fn preprocess_current_dir() -> Result<()> {
@@ -257,9 +263,9 @@ async fn ensure_entry_point() -> Result<()> {
     Ok(())
 }
 
-async fn serve(port: u16, public_dir: Option<PathBuf>) -> Result<()> {
+async fn serve(dev_mode: bool, port: u16, public_dir: Option<PathBuf>) -> Result<()> {
     println!("📦 Building Lua state...");
-    let lua = luax::prepare_lua()?;
+    let lua = luax::prepare_lua(dev_mode)?;
     println!("🛫 Starting server on port {}...", port);
     server::Server::serve(lua, port, public_dir).await
 }
