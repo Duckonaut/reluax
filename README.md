@@ -1,6 +1,6 @@
-![logo](assets/logo.svg)
+<div style="align-text: center;">![logo](assets/logo.svg)</div>
 
-# reluax
+![Crates.io Version](https://img.shields.io/crates/v/reluax)
 `reluax` lets you easily create dynamic websites in a custom dialect of Lua,
 inspired by JSX. The service has been written in Rust, and uses `luajit` as
 its Lua runtime for performance and ease of integration of other libraries.
