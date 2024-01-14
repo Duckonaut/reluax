@@ -3,6 +3,12 @@ name = "reluax"
 version = "0.1.0"
 edition = "2021"
 description = "A LuaX-based web framework"
+authors = ["Duckonaut"]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/Duckonaut/reluax"
+homepage = "https://github.com/Duckonaut/reluax"
+keywords = ["http", "web", "framework", "lua", "luax"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
