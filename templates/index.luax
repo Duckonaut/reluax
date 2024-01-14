@@ -1,14 +1,33 @@
 return function()
-    return <html>
-        <head>
-            <title>PROJECT_NAME</title>
-        </head>
-        <body>
-            <h1>PROJECT_NAME</h1>
-            <p>Random number for you: {$ tostring(math.floor(math.random() * 100)) $}</p>
-            <p style={ "font-size: " .. tostring(math.floor(math.random() * 100)) .. 'px' }>
-                What font size is this?
-            </p>
-        </body>
+  local font_sizes = { 12, 14, 18, 24 }
+  local font_size = font_sizes[math.floor(math.random() * #font_sizes) + 1]
+  return
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <link rel="stylesheet"
+              href="//cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack-subset.css" />
+        <link rel="stylesheet" href="style.css" />
+        <title>PROJECT_NAME</title>
+      </head>
+      <body>
+        <div id="app-main">
+          <h1>PROJECT_NAME</h1>
+          <p class="description">
+            Welcome to <strong class="project">PROJECT_NAME</strong>!
+          </p>
+          <p class="description">
+            This project runs on
+            <a class="reluax" href="https://github.com/Duckonaut/reluax">Reluax</a>.
+          </p>
+          <p>
+            Random number for you: 
+            <span class="rand">{$ tostring(math.floor(math.random() * 100)) $}</span>
+          </p>
+          <p class="randsize" style={ "font-size: " .. tostring(font_size) .. 'pt' }>
+              What font size is this?
+          </p>
+        </div>
+      </body>
     </html>
 end

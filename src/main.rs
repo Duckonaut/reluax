@@ -300,6 +300,12 @@ fn create_project(name: &str) -> Result<()> {
 
     println!("🌴 Created project {}", name.bright_yellow());
 
+    println!(
+        "🛠️ To start a development server, change to the {} directory and run {}.",
+        name.bright_yellow(),
+        "reluax dev".bright_green()
+    );
+
     Ok(())
 }
 
@@ -316,6 +322,11 @@ fn init_project() -> Result<()> {
     write_templates(name)?;
 
     println!("🌴 Initialized project {}", name.bright_yellow());
+
+    println!(
+        "🛠️ To start a development server, run {}.",
+        "reluax dev".bright_green()
+    );
 
     Ok(())
 }

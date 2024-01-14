@@ -1,0 +1,59 @@
+:root {
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: var(--color-fg);
+  background-color: var(--color-bg);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+
+  /* variables */
+  --color-bg: #161f30;
+  --color-fg: #a3b3d9;
+  --color-light-blue: #a3b3d9;
+  --color-yellow: #e5c07b;
+}
+
+#app-main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1rem 1rem 1rem 1rem;
+  text-align: center;
+  font-family: Hack, monospace;
+}
+
+h1 {
+  font-size: 30pt;
+  color: var(--color-yellow);
+  text-align: center;
+  font-weight: bold;
+}
+
+.project {
+  color: var(--color-light-blue);
+}
+
+.description {
+  font-size: 15pt;
+  text-align: center;
+  font-family: "Trebuchet MS", Helvetica, sans-serif;
+  font-weight: bold;
+}
+
+.rand, .reluax {
+  color: var(--color-yellow);
+}
+
+a:link {
+  color: var(--color-light-blue);
+  text-decoration: none;
+}
+
+a:visited {
+  color: var(--color-light-blue);
+  text-decoration: none;
+}
