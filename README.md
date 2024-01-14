@@ -1,5 +1,7 @@
 <p align="center"><img src="assets/logo.svg" /></p>
 
+# Reluax
+
 ![Crates.io Version](https://img.shields.io/crates/v/reluax)
 
 `reluax` lets you easily create dynamic websites in a custom dialect of Lua,
