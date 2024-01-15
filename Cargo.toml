@@ -1,6 +1,6 @@
 [package]
 name = "reluax"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A LuaX-based web framework"
 authors = ["Duckonaut"]
