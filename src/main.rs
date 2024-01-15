@@ -307,7 +307,7 @@ fn create_project(name: &str) -> Result<()> {
     println!("🌴 Created project {}", name.bright_yellow());
 
     println!(
-        "🛠️ To start a development server, change to the {} directory and run {}.",
+        "🛠️  To start a development server, change to the {} directory and run {}.",
         name.bright_yellow(),
         "reluax dev".bright_green()
     );
@@ -330,7 +330,7 @@ fn init_project() -> Result<()> {
     println!("🌴 Initialized project {}", name.bright_yellow());
 
     println!(
-        "🛠️ To start a development server, run {}.",
+        "🛠️  To start a development server, run {}.",
         "reluax dev".bright_green()
     );
 
@@ -351,6 +351,9 @@ fn write_templates(name: &str) -> Result<()> {
             .replace("PROJECT_NAME", name)
             .as_bytes(),
     )?;
+
+    let mut file = std::fs::File::create("style.css")?;
+    file.write_all(include_str!("../templates/style.css").as_bytes())?;
 
     Ok(())
 }
