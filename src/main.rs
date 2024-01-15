@@ -72,9 +72,10 @@ enum Args {
         #[clap(
             short = 'P',
             long = "public-dir",
+            default_value = ".",
             help = "The static files directory to serve"
         )]
-        public_dir: Option<std::path::PathBuf>,
+        public_dir: std::path::PathBuf,
         #[clap(
             short = 'p',
             long = "port",
@@ -149,24 +150,19 @@ async fn main() -> color_eyre::Result<()> {
 
             println!("🌴 Project root: {}", change_dir.display().bright_yellow());
 
-            let public_dir = if let Some(public_dir) = public_dir {
-                if !public_dir.is_dir() {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        format!("{} is not a directory", public_dir.display()),
-                    )
-                    .into());
-                }
+            if !public_dir.is_dir() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("{} is not a directory", public_dir.display()),
+                )
+                .into());
+            }
 
-                println!(
-                    "🌴 Public directory: {}",
-                    public_dir.display().bright_yellow()
-                );
-                Some(public_dir.canonicalize()?)
-            } else {
-                println!("🌴 Public directory: {}", "none".bright_yellow());
-                None
-            };
+            println!(
+                "🌴 Public directory: {}",
+                public_dir.display().bright_yellow()
+            );
+            let public_dir = Some(public_dir.canonicalize()?);
 
             if local {
                 serve_locally(change_dir, true, port, public_dir).await
