@@ -43,7 +43,7 @@ pr-run-mode = "skip"
 
 [workspace.metadata.dist.dependencies.apt]
 luajit = "*"
-libluajit-5.1-dev = "*"
+"libluajit-5.1-dev" = "*"
 
 [workspace.metadata.dist.dependencies.homebrew]
 luajit = "*"
