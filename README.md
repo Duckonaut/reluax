@@ -44,12 +44,15 @@ The project was heavily inspired by Ben Visness' blog post,
 which I highly recommend reading.
 
 ## API
-Reluax expects to run a directory of files, with the entry point being `reluax.lua(x)`
-This module needs to return a table containing the member function `route`.
+A Reluax project is very simple. Reluax expects to run a directory of files,
+with the entry point being `reluax.luax` or `reluax.lua`. This module needs
+to return a table containing the member function `route`, and optionally a
+project name under the key `name`. For code examples, check the
+[examples](https://github.com/Duckonaut/reluax/tree/main/example) directory.
 
-This function will be called with the path and optionally method and body of a
-request, and can return a variety of responses, by returning two values: the
-status code, and the response body.
+The `route` function will be called with the path and, optionally, method and
+body of a request, and can return a variety of responses, by returning two
+values: the status code, and the response body.
 
 The response body will usually be a table, and by default will be treated as a HTML
 page (see `example/basic/`). It can be optionally wrapped using the functions
