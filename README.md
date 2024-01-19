@@ -32,6 +32,7 @@ Options:
 
 Examples:
   reluax serve
+  reluax serve --port 4000
   reluax dev -P public/ -C luax/
 ```
 
@@ -41,3 +42,28 @@ To create an example project, run `reluax new my-first-project`.
 The project was heavily inspired by Ben Visness' blog post,
 [I made JSX for Lua (because I hate static sites)](https://bvisness.me/luax/),
 which I highly recommend reading.
+
+## API
+Reluax expects to run a directory of files, with the entry point being `reluax.lua(x)`
+This module needs to return a table containing the member function `route`.
+
+This function will be called with the path and optionally method and body of a
+request, and can return a variety of responses, by returning two values: the
+status code, and the response body.
+
+The response body will usually be a table, and by default will be treated as a HTML
+page (see `example/basic/`). It can be optionally wrapped using the functions
+`reluax.html` or `reluax.json`, the first of which will make sure the HTML is returned
+as is, without a `<!DOCTYPE html>` tag, and the second returning the table as a JSON
+object.
+
+With this you can build a rather powerful backend, handling templating, routing, and
+anything else through LuaX code.
+
+The `reluax` global table contains several utility functions, described below:
+- `reluax.json`: wrap the table to be interpreted as a JSON response,
+- `reluax.html_page`: wrap the table to be interpreted as a full HTML page (default behavior),
+- `reluax.html`: wrap the table to be interpreted as a HTML excerpt (for e.g. use with
+  [htmx](https://htmx.org)),
+- `reluax.path_matches`: check if a path string matches the template,
+- `reluax.path_extract`: extract named path parameters from the path.
