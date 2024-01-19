@@ -76,6 +76,30 @@ pub fn table_to_html<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result
     Ok(())
 }
 
+pub fn table_to_json<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result<()> {
+    let mut first = true;
+    write!(f, "{{")?;
+    for pair in table.pairs::<String, rlua::Value>() {
+        let (key, value) = pair?;
+        if !first {
+            write!(f, ",")?;
+        }
+        first = false;
+        write!(f, "\"{}\":", key)?;
+        match value {
+            rlua::Value::Table(t) => table_to_json(t, f)?,
+            rlua::Value::String(s) => write!(f, "\"{}\"", s.to_str()?)?,
+            rlua::Value::Boolean(b) => write!(f, "{}", b)?,
+            rlua::Value::Number(n) => write!(f, "{}", n)?,
+            rlua::Value::Nil => write!(f, "null")?,
+            _ => return Err(LuaXError::NonJsonType.into()),
+        }
+    }
+    write!(f, "}}")?;
+
+    Ok(())
+}
+
 pub fn preprocess(s: &str) -> Result<String> {
     let mut buf = Vec::new();
     let preprocessor = preprocessor::Preprocessor::new(s, &mut buf)?;
@@ -142,6 +166,12 @@ pub fn prepare_lua(dev_mode: bool) -> Result<Lua> {
         reluax.set("url_matches", url_matches)?;
         let url_extract = ctx.create_function(utils::url_extract)?;
         reluax.set("url_extract", url_extract)?;
+        let html = ctx.create_function(utils::wrap_html)?;
+        reluax.set("html", html)?;
+        let html_page = ctx.create_function(utils::wrap_html_page)?;
+        reluax.set("html_page", html_page)?;
+        let json = ctx.create_function(utils::wrap_json)?;
+        reluax.set("json", json)?;
         reluax.set("dev_mode", dev_mode)?;
 
         ctx.globals().set("reluax", reluax)?;
@@ -266,6 +296,30 @@ mod utils {
                 return Ok(params);
             }
         }
+    }
+
+    /// Wrap a table in a table to signal that it should be rendered as HTML
+    pub fn wrap_html<'lua>(ctx: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
+        let html_table = ctx.create_table()?;
+        html_table.set("type", "html")?;
+        html_table.set("value", table)?;
+        Ok(html_table)
+    }
+
+    /// Wrap a table in a table to signal that it should be rendered as a full HTML page
+    pub fn wrap_html_page<'lua>(ctx: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
+        let html_table = ctx.create_table()?;
+        html_table.set("type", "html-page")?;
+        html_table.set("value", table)?;
+        Ok(html_table)
+    }
+
+    /// Wrap a table in a table to signal that it should be rendered as JSON
+    pub fn wrap_json<'lua>(ctx: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
+        let json_table = ctx.create_table()?;
+        json_table.set("type", "json")?;
+        json_table.set("value", table)?;
+        Ok(json_table)
     }
 
     #[cfg(test)]

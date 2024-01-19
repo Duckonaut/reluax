@@ -9,6 +9,7 @@ pub enum LuaXError {
     ExpectedVar,
     ExpectedExpression,
     UnterminatedStringLiteral,
+    NonJsonType,
 }
 
 impl std::error::Error for LuaXError {}
@@ -23,6 +24,7 @@ impl Display for LuaXError {
             LuaXError::ExpectedVar => write!(f, "Expected variable"),
             LuaXError::ExpectedExpression => write!(f, "Expected expression"),
             LuaXError::UnterminatedStringLiteral => write!(f, "Unterminated string literal"),
+            LuaXError::NonJsonType => write!(f, "Type cannot be represented in JSON"),
         }
     }
 }

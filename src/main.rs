@@ -219,8 +219,7 @@ async fn serve_from_temp(
         tmp_dir.path().display().bright_blue()
     );
 
-    // copy all files from the current directory to the temporary directory recursively.
-    let copied = recurse_copy(&change_dir, tmp_dir.path())?;
+    let copied = recurse_copy_lua(&change_dir, tmp_dir.path())?;
 
     println!("⏲️  {} files copied", copied.bright_green());
 
@@ -266,7 +265,7 @@ async fn serve(dev_mode: bool, port: u16, public_dir: Option<PathBuf>) -> Result
     server::Server::serve(lua, port, public_dir).await
 }
 
-fn recurse_copy(from: &Path, to: &Path) -> Result<usize> {
+fn recurse_copy_lua(from: &Path, to: &Path) -> Result<usize> {
     let mut copied = 0;
     for entry in std::fs::read_dir(from)? {
         let entry = entry?;
@@ -276,8 +275,12 @@ fn recurse_copy(from: &Path, to: &Path) -> Result<usize> {
 
         if path.is_dir() {
             std::fs::create_dir(&to)?;
-            copied += recurse_copy(&path, &to)?;
+            copied += recurse_copy_lua(&path, &to)?;
         } else {
+            let ext = path.extension().and_then(|s| s.to_str());
+            if ext != Some("lua") && ext != Some("luax") {
+                continue;
+            }
             std::fs::copy(&path, &to)?;
             copied += 1;
         }
