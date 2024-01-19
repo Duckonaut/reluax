@@ -1,0 +1,20 @@
+local route = function(path)
+  if path == '/' then
+    return 200,
+      <html>
+        <head>
+          <title>basic-example</title>
+        </head>
+        <body>
+          <h1>This is the simplest example of a Reluax application.</h1>
+        </body>
+      </html>
+  end
+
+  return 404, 'Not Found'
+end
+
+return {
+  name = 'basic-example',
+  route = route
+}
