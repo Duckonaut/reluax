@@ -1,0 +1,39 @@
+local page_wrapper = function(content)
+  return reluax.html_page(
+    <html>
+      <head>
+        <title>reluax</title>
+        <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+      </head>
+      <body>
+        {$ content $}
+      </body>
+    </html>
+  )
+end
+
+local route = function(path, method, body)
+  if path == "/" and method == "GET" then
+    return 200, page_wrapper(
+      <div>
+        <h1>reluax</h1>
+        <p>Click the button to get a random number.</p>
+        <button hx-post="/random" hx-swap="outerHTML">Random</button>
+      </div>
+    )
+  elseif path == "/random" and method == "POST" then
+    return 200, reluax.html(<h3>{$ math.random(1, 100) $}</h3>)
+  end
+
+  return 404, page_wrapper(
+    <div>
+      <h1>reluax</h1>
+      <p>404 Not Found</p>
+    </div>
+  )
+end
+
+return {
+  name = "htmx-example",
+  route = route
+}

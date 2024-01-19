@@ -1,0 +1,21 @@
+local message = "default"
+
+local route = function(path, method, body)
+  if path ~= "/api/example" then
+    return 404, reluax.json { message = "Not Found" }
+  end
+
+  if method == "GET" then
+    return 200, reluax.json { message = message }
+  elseif method == "POST" then
+    message = body
+    return 200, reluax.json { message = message }
+  end
+
+  return 400, reluax.json { message = "Bad Request" }
+end
+
+return {
+  name = "api-example",
+  route = route
+}
