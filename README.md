@@ -12,7 +12,9 @@ its Lua runtime for performance and ease of integration of other libraries.
 - `luajit`
 
 ## Installation
-This project is available through GitHub releases as a prebuild binary, or
+Currently, the project is only supported on Linux and MacOS.
+
+Reluax is available through GitHub releases as a prebuilt binary, or
 from `crates.io` through `cargo install reluax`, if you have the Rust
 toolchain installed. Alternatively, it is packaged as a Nix flake:
 if you have Nix installed, you can `nix run github:Duckonaut/reluax`.
