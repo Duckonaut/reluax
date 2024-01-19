@@ -186,7 +186,7 @@ impl State {
             let route: rlua::Function = manifest.get("route")?;
 
             let method = method.as_str();
-            let body: Vec<u8> = body.to_bytes().to_vec();
+            let body: rlua::String = ctx.create_string(&body.to_bytes().to_vec())?;
 
             let res: rlua::Result<(rlua::Integer, rlua::Value)> =
                 route.call((path.clone(), method, body));

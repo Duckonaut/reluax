@@ -63,6 +63,8 @@ pub fn table_to_html<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result
                 match child? {
                     rlua::Value::Table(child) => table_to_html(child, f)?,
                     rlua::Value::String(s) => write!(f, "{}", s.to_str()?)?,
+                    rlua::Value::Boolean(b) => write!(f, "{}", b)?,
+                    rlua::Value::Number(n) => write!(f, "{}", n)?,
                     _ => return Err(LuaXError::NonTableChildren.into()),
                 }
             }
