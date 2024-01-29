@@ -89,54 +89,52 @@ fn mk_file_response(path: PathBuf) -> Result<Response<Full<Bytes>>> {
 }
 
 fn decode_luax_response(status: StatusCode, t: rlua::Table) -> Result<Response<Full<Bytes>>> {
-    if t.contains_key("type")? {
+    let lua_headers: Option<rlua::Table> = t.get("headers")?;
+
+    let (response_body, mime_type)  = if t.contains_key("type")? {
         let ty: String = t.get("type")?;
         let mime_type: Option<String> = t.get("mime_type")?;
 
         match ty.as_str() {
             "html" => {
-                let html: rlua::Table = t.get("value")?;
                 let mut buf = Vec::new();
-                table_to_html(html, &mut buf)?;
-                Ok(Response::builder()
-                    .header("Content-Type", mime_type.unwrap_or("text/html".to_string()))
-                    .status(status)
-                    .body(Full::new(Bytes::from(buf)))?)
+                table_to_html(t, &mut buf)?;
+                (buf, mime_type.unwrap_or("text/html".to_string()))
             }
             "json" => {
-                let json: rlua::Table = t.get("value")?;
                 let mut buf = Vec::new();
-                table_to_json(json, &mut buf)?;
-
-                Ok(Response::builder()
-                    .header(
-                        "Content-Type",
-                        mime_type.unwrap_or("application/json".to_string()),
-                    )
-                    .status(status)
-                    .body(Full::new(Bytes::from(buf)))?)
+                table_to_json(t, &mut buf)?;
+                (buf, mime_type.unwrap_or("application/json".to_string()))
             }
             "html-page" => {
-                let html: rlua::Table = t.get("value")?;
                 let mut buf = Vec::new();
                 writeln!(&mut buf, "<!DOCTYPE html>")?;
-                table_to_html(html, &mut buf)?;
-                Ok(Response::builder()
-                    .header("Content-Type", mime_type.unwrap_or("text/html".to_string()))
-                    .status(status)
-                    .body(Full::new(Bytes::from(buf)))?)
+                table_to_html(t, &mut buf)?;
+                (buf, mime_type.unwrap_or("text/html".to_string()))
             }
-            _ => Err(ReluaxError::Server("Unknown response type".to_string()).into()),
+            _ => return Err(ReluaxError::Server("Unknown response type".to_string()).into()),
         }
     } else {
         let mut buf = Vec::new();
         writeln!(&mut buf, "<!DOCTYPE html>")?;
         table_to_html(t, &mut buf)?;
-        Ok(Response::builder()
-            .header("Content-Type", "text/html")
-            .status(status)
-            .body(Full::new(Bytes::from(buf)))?)
+        (buf, "text/html".to_string())
+    };
+
+    let mut response_builder = Response::builder()
+        .status(status)
+        .header("Content-Type", mime_type);
+
+    if let Some(lua_headers) = lua_headers {
+        for r in lua_headers.pairs::<String, String>() {
+            let (k, v) = r?;
+            response_builder = response_builder.header(k, v);
+        }
     }
+
+    let response = response_builder.body(Full::new(Bytes::from(response_body)))?;
+
+    Ok(response)
 }
 
 impl Service<Request<Incoming>> for State {
@@ -150,10 +148,15 @@ impl Service<Request<Incoming>> for State {
         let method = req.method().clone();
         let lua = self.lua.clone();
         let public_dir = self.public_dir.clone();
+        let headers = req
+            .headers()
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_string()))
+            .collect();
         Box::pin(async {
             let body = req.into_body().collect().await?;
 
-            Self::serve(lua, public_dir, path, method, body)
+            Self::serve(lua, public_dir, path, method, body, headers)
         })
     }
 }
@@ -165,6 +168,7 @@ impl State {
         path: String,
         method: Method,
         body: Collected<Bytes>,
+        headers: Vec<(String, String)>,
     ) -> Result<Response<Full<Bytes>>> {
         let lua = lua.lock().unwrap();
 
@@ -187,9 +191,13 @@ impl State {
 
             let method = method.as_str();
             let body: rlua::String = ctx.create_string(&body.to_bytes().to_vec())?;
+            let lua_headers: rlua::Table = ctx.create_table()?;
+            for (k, v) in headers {
+                lua_headers.set(k, v)?;
+            }
 
             let res: rlua::Result<(rlua::Integer, rlua::Value)> =
-                route.call((path.clone(), method, body));
+                route.call((path.clone(), method, lua_headers, body));
 
             let res = match res {
                 Ok(r) => r,

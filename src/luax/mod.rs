@@ -174,6 +174,8 @@ pub fn prepare_lua(dev_mode: bool) -> Result<Lua> {
         reluax.set("html_page", html_page)?;
         let json = ctx.create_function(utils::wrap_json)?;
         reluax.set("json", json)?;
+        let headers = ctx.create_function(utils::wrap_headers)?;
+        reluax.set("headers", headers)?;
         reluax.set("dev_mode", dev_mode)?;
 
         ctx.globals().set("reluax", reluax)?;
@@ -301,27 +303,30 @@ mod utils {
     }
 
     /// Wrap a table in a table to signal that it should be rendered as HTML
-    pub fn wrap_html<'lua>(ctx: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
-        let html_table = ctx.create_table()?;
-        html_table.set("type", "html")?;
-        html_table.set("value", table)?;
-        Ok(html_table)
+    pub fn wrap_html<'lua>(_: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
+        table.set("type", "html")?;
+        Ok(table)
     }
 
     /// Wrap a table in a table to signal that it should be rendered as a full HTML page
-    pub fn wrap_html_page<'lua>(ctx: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
-        let html_table = ctx.create_table()?;
-        html_table.set("type", "html-page")?;
-        html_table.set("value", table)?;
-        Ok(html_table)
+    pub fn wrap_html_page<'lua>(_: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
+        table.set("type", "html-page")?;
+        Ok(table)
     }
 
     /// Wrap a table in a table to signal that it should be rendered as JSON
-    pub fn wrap_json<'lua>(ctx: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
-        let json_table = ctx.create_table()?;
-        json_table.set("type", "json")?;
-        json_table.set("value", table)?;
-        Ok(json_table)
+    pub fn wrap_json<'lua>(_: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
+        table.set("type", "json")?;
+        Ok(table)
+    }
+
+    /// Wrap a table to add headers to the response
+    pub fn wrap_headers<'lua>(
+        _: Context<'lua>,
+        (table, headers): (Table<'lua>, Table<'lua>),
+    ) -> Result<Table<'lua>> {
+        table.set("headers", headers)?;
+        Ok(table)
     }
 
     #[cfg(test)]
