@@ -287,10 +287,6 @@ fn recurse_copy_lua(from: &Path, to: &Path) -> Result<usize> {
             std::fs::create_dir(&to)?;
             copied += recurse_copy_lua(&path, &to)?;
         } else {
-            let ext = path.extension().and_then(|s| s.to_str());
-            if ext != Some("lua") && ext != Some("luax") {
-                continue;
-            }
             std::fs::copy(&path, &to)?;
             copied += 1;
         }
