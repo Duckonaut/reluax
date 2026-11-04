@@ -23,10 +23,6 @@ macro_rules! try_all_paths {
     };
 }
 
-pub trait TokenProducer {
-    fn next(&mut self) -> Option<Token>;
-}
-
 #[derive(Debug)]
 pub struct Lexer<'s> {
     src: &'s str,
@@ -297,18 +293,18 @@ impl<'s> Lexer<'s> {
     }
 
     fn number(&mut self) -> TokenizeResult<'s> {
-        if !self.current.map_or(false, |c| c.is_numeric()) {
+        if !self.current.is_some_and(|c| c.is_numeric()) {
             return TokenizeResult::None;
         }
 
         let start = self.current_pos_in_bytes;
 
-        while self.current.map_or(false, |c| c.is_numeric()) {
+        while self.current.is_some_and(|c| c.is_numeric()) {
             self.advance();
         }
 
         if self.match_char('.') {
-            while self.current.map_or(false, |c| c.is_numeric()) {
+            while self.current.is_some_and(|c| c.is_numeric()) {
                 self.advance();
             }
         }
@@ -317,7 +313,7 @@ impl<'s> Lexer<'s> {
             if self.match_char('-') || self.match_char('+') {
                 self.advance();
             }
-            while self.current.map_or(false, |c| c.is_numeric()) {
+            while self.current.is_some_and(|c| c.is_numeric()) {
                 self.advance();
             }
         }

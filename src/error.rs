@@ -32,7 +32,7 @@ impl Display for LuaXError {
 #[derive(Debug)]
 pub enum ReluaxError {
     LuaX(LuaXError),
-    Lua(rlua::Error),
+    Lua(mlua::Error),
     Server(String),
 }
 
@@ -54,8 +54,8 @@ impl From<LuaXError> for ReluaxError {
     }
 }
 
-impl From<rlua::Error> for ReluaxError {
-    fn from(err: rlua::Error) -> Self {
+impl From<mlua::Error> for ReluaxError {
+    fn from(err: mlua::Error) -> Self {
         ReluaxError::Lua(err)
     }
 }

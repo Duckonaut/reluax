@@ -261,16 +261,14 @@ async fn ensure_entry_point() -> Result<()> {
 async fn serve(dev_mode: bool, port: u16, public_dir: Option<PathBuf>) -> Result<()> {
     println!("📦 Building Lua state...");
     let lua = luax::prepare_lua(dev_mode)?;
-    lua.context(|ctx| -> Result<()> {
-        let entry_table: rlua::Table = ctx.load("require('reluax')").eval()?;
-        let project_name: Option<String> = entry_table.get("name")?;
 
-        if let Some(name) = project_name {
-            println!("🌴 App name: {}", name.bright_yellow());
-        }
+    let entry_table: mlua::Table = lua.load("require('reluax')").eval()?;
+    let project_name: Option<String> = entry_table.get("name")?;
 
-        Ok(())
-    })?;
+    if let Some(name) = project_name {
+        println!("🌴 App name: {}", name.bright_yellow());
+    }
+
     println!("🛫 Starting server on port {}...", port);
     server::Server::serve(lua, port, public_dir).await
 }

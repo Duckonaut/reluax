@@ -16,7 +16,7 @@ use tokio::net::TcpListener;
 use crate::error::ReluaxError;
 use crate::luax::{table_to_html, table_to_json};
 use color_eyre::Result;
-use rlua::Lua;
+use mlua::Lua;
 
 pub struct Server {
     port: u16,
@@ -88,10 +88,10 @@ fn mk_file_response(path: PathBuf) -> Result<Response<Full<Bytes>>> {
         .body(Full::new(Bytes::from(bytes)))?)
 }
 
-fn decode_luax_response(status: StatusCode, t: rlua::Table) -> Result<Response<Full<Bytes>>> {
-    let lua_headers: Option<rlua::Table> = t.get("headers")?;
+fn decode_luax_response(status: StatusCode, t: mlua::Table) -> Result<Response<Full<Bytes>>> {
+    let lua_headers: Option<mlua::Table> = t.get("headers")?;
 
-    let (response_body, mime_type)  = if t.contains_key("type")? {
+    let (response_body, mime_type) = if t.contains_key("type")? {
         let ty: String = t.get("type")?;
         let mime_type: Option<String> = t.get("mime_type")?;
 
@@ -172,8 +172,8 @@ impl State {
     ) -> Result<Response<Full<Bytes>>> {
         let lua = lua.lock().unwrap();
 
-        let res = lua.context(|ctx| -> Result<Response<Full<Bytes>>> {
-            let manifest: rlua::Result<rlua::Table> = ctx.load("require('reluax')").eval();
+        let res = {
+            let manifest: mlua::Result<mlua::Table> = lua.load("require('reluax')").eval();
 
             let manifest = match manifest {
                 Ok(m) => m,
@@ -187,16 +187,16 @@ impl State {
                 }
             };
 
-            let route: rlua::Function = manifest.get("route")?;
+            let route: mlua::Function = manifest.get("route")?;
 
             let method = method.as_str();
-            let body: rlua::String = ctx.create_string(&body.to_bytes().to_vec())?;
-            let lua_headers: rlua::Table = ctx.create_table()?;
+            let body: mlua::LuaString = lua.create_string(body.to_bytes())?;
+            let lua_headers: mlua::Table = lua.create_table()?;
             for (k, v) in headers {
                 lua_headers.set(k, v)?;
             }
 
-            let res: rlua::Result<(rlua::Integer, rlua::Value)> =
+            let res: mlua::Result<(mlua::Integer, mlua::Value)> =
                 route.call((path.clone(), method, lua_headers, body));
 
             let res = match res {
@@ -227,13 +227,13 @@ impl State {
             }
 
             match res.1 {
-                rlua::Value::String(s) => mk_response(status, s.to_str()?.to_string()),
-                rlua::Value::Table(t) => decode_luax_response(status, t),
-                rlua::Value::Nil => Err(ReluaxError::Server("No route found".to_string()).into()),
-                rlua::Value::Error(e) => Err(ReluaxError::Lua(e).into()),
+                mlua::Value::String(s) => mk_response(status, s.to_str()?.to_string()),
+                mlua::Value::Table(t) => decode_luax_response(status, t),
+                mlua::Value::Nil => Err(ReluaxError::Server("No route found".to_string()).into()),
+                mlua::Value::Error(e) => Err(ReluaxError::Lua(*e).into()),
                 _ => Err(ReluaxError::Server("Route returned invalid type".to_string()).into()),
             }
-        })?;
+        }?;
 
         Ok(res)
     }

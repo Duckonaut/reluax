@@ -1,7 +1,7 @@
 use crate::luax::{lexer::Lexer, tokens::Token, *};
 use color_eyre::Result;
 
-fn tokenize(input: &str) -> Result<Vec<Token>> {
+fn tokenize(input: &str) -> Result<Vec<Token<'_>>> {
     let mut lexer = Lexer::new(input);
     let mut tokens = Vec::new();
 

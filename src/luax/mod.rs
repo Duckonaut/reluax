@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use rlua::Lua;
+use mlua::Lua;
 
 use crate::{error::LuaXError, Result};
 
@@ -10,15 +10,15 @@ mod preprocessor;
 mod tests;
 mod tokens;
 
-pub fn table_to_html<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result<()> {
+pub fn table_to_html<W: std::io::Write>(table: mlua::Table, f: &mut W) -> Result<()> {
     let tag_name: Option<String> = table.get("tag").unwrap();
 
     if tag_name.is_none() {
         // we might be in a list
-        for child in table.sequence_values::<rlua::Value>() {
+        for child in table.sequence_values::<mlua::Value>() {
             match child? {
-                rlua::Value::Table(child) => table_to_html(child, f)?,
-                rlua::Value::String(s) => write!(f, "{}", s.to_str()?)?,
+                mlua::Value::Table(child) => table_to_html(child, f)?,
+                mlua::Value::String(s) => write!(f, "{}", s.to_str()?)?,
                 _ => return Err(LuaXError::NonTableChildren.into()),
             }
         }
@@ -31,7 +31,7 @@ pub fn table_to_html<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result
     write!(f, "<{}", type_name)?;
     let mut children = None;
     let mut attrs = None;
-    for pair in table.pairs::<String, rlua::Value>() {
+    for pair in table.pairs::<String, mlua::Value>() {
         let (key, value) = pair?;
         if key == "tag" {
             continue;
@@ -46,8 +46,8 @@ pub fn table_to_html<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result
         }
     }
     if let Some(attrs) = attrs {
-        if let rlua::Value::Table(attrs) = attrs {
-            for pair in attrs.pairs::<String, rlua::String>() {
+        if let mlua::Value::Table(attrs) = attrs {
+            for pair in attrs.pairs::<String, mlua::LuaString>() {
                 let (key, value) = pair?;
                 write!(f, " {}=\"{}\"", key, value.to_str()?)?;
             }
@@ -58,13 +58,13 @@ pub fn table_to_html<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result
     write!(f, ">")?;
 
     if let Some(children) = children {
-        if let rlua::Value::Table(children) = children {
-            for child in children.sequence_values::<rlua::Value>() {
+        if let mlua::Value::Table(children) = children {
+            for child in children.sequence_values::<mlua::Value>() {
                 match child? {
-                    rlua::Value::Table(child) => table_to_html(child, f)?,
-                    rlua::Value::String(s) => write!(f, "{}", s.to_str()?)?,
-                    rlua::Value::Boolean(b) => write!(f, "{}", b)?,
-                    rlua::Value::Number(n) => write!(f, "{}", n)?,
+                    mlua::Value::Table(child) => table_to_html(child, f)?,
+                    mlua::Value::String(s) => write!(f, "{}", s.to_str()?)?,
+                    mlua::Value::Boolean(b) => write!(f, "{}", b)?,
+                    mlua::Value::Number(n) => write!(f, "{}", n)?,
                     _ => return Err(LuaXError::NonTableChildren.into()),
                 }
             }
@@ -78,10 +78,10 @@ pub fn table_to_html<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result
     Ok(())
 }
 
-pub fn table_to_json<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result<()> {
+pub fn table_to_json<W: std::io::Write>(table: mlua::Table, f: &mut W) -> Result<()> {
     let mut first = true;
     write!(f, "{{")?;
-    for pair in table.pairs::<String, rlua::Value>() {
+    for pair in table.pairs::<String, mlua::Value>() {
         let (key, value) = pair?;
         if !first {
             write!(f, ",")?;
@@ -89,11 +89,11 @@ pub fn table_to_json<W: std::io::Write>(table: rlua::Table, f: &mut W) -> Result
         first = false;
         write!(f, "\"{}\":", key)?;
         match value {
-            rlua::Value::Table(t) => table_to_json(t, f)?,
-            rlua::Value::String(s) => write!(f, "\"{}\"", s.to_str()?)?,
-            rlua::Value::Boolean(b) => write!(f, "{}", b)?,
-            rlua::Value::Number(n) => write!(f, "{}", n)?,
-            rlua::Value::Nil => write!(f, "null")?,
+            mlua::Value::Table(t) => table_to_json(t, f)?,
+            mlua::Value::String(s) => write!(f, "\"{}\"", s.to_str()?)?,
+            mlua::Value::Boolean(b) => write!(f, "{}", b)?,
+            mlua::Value::Number(n) => write!(f, "{}", n)?,
+            mlua::Value::Nil => write!(f, "null")?,
             _ => return Err(LuaXError::NonJsonType.into()),
         }
     }
@@ -161,33 +161,29 @@ pub fn prepare_lua(dev_mode: bool) -> Result<Lua> {
 
     // create a table called "reluax" with common utility functions
     // and put it in the global scope
-    lua.context(|ctx| -> Result<()> {
-        let reluax = ctx.create_table()?;
+    let reluax = lua.create_table()?;
 
-        let url_matches = ctx.create_function(utils::url_matches)?;
-        reluax.set("url_matches", url_matches)?;
-        let url_extract = ctx.create_function(utils::url_extract)?;
-        reluax.set("url_extract", url_extract)?;
-        let html = ctx.create_function(utils::wrap_html)?;
-        reluax.set("html", html)?;
-        let html_page = ctx.create_function(utils::wrap_html_page)?;
-        reluax.set("html_page", html_page)?;
-        let json = ctx.create_function(utils::wrap_json)?;
-        reluax.set("json", json)?;
-        let headers = ctx.create_function(utils::wrap_headers)?;
-        reluax.set("headers", headers)?;
-        reluax.set("dev_mode", dev_mode)?;
+    let url_matches = lua.create_function(utils::url_matches)?;
+    reluax.set("url_matches", url_matches)?;
+    let url_extract = lua.create_function(utils::url_extract)?;
+    reluax.set("url_extract", url_extract)?;
+    let html = lua.create_function(utils::wrap_html)?;
+    reluax.set("html", html)?;
+    let html_page = lua.create_function(utils::wrap_html_page)?;
+    reluax.set("html_page", html_page)?;
+    let json = lua.create_function(utils::wrap_json)?;
+    reluax.set("json", json)?;
+    let headers = lua.create_function(utils::wrap_headers)?;
+    reluax.set("headers", headers)?;
+    reluax.set("dev_mode", dev_mode)?;
 
-        ctx.globals().set("reluax", reluax)?;
-
-        Ok(())
-    })?;
+    lua.globals().set("reluax", reluax)?;
 
     Ok(lua)
 }
 
 mod utils {
-    use rlua::{Context, Result, Table};
+    use mlua::{Lua, Result, Table};
 
     /// Check if a path matches a pattern
     ///
@@ -202,7 +198,7 @@ mod utils {
     ///
     /// This function only checks if the path matches the pattern, it does not
     /// capture any values.
-    pub fn url_matches(_: Context<'_>, (pattern, path): (String, String)) -> Result<bool> {
+    pub fn url_matches(_: &Lua, (pattern, path): (String, String)) -> Result<bool> {
         let mut path = path.chars();
         let mut pattern = pattern.chars();
 
@@ -253,7 +249,7 @@ mod utils {
     /// - `{name}` matches anything except `/` and captures the value as `name`
     ///
     /// This function will return a table with the captured values.
-    pub fn url_extract(ctx: Context<'_>, (pattern, path): (String, String)) -> Result<Table> {
+    pub fn url_extract(ctx: &Lua, (pattern, path): (String, String)) -> Result<Table> {
         let mut path = path.chars();
         let mut pattern = pattern.chars();
 
@@ -303,35 +299,32 @@ mod utils {
     }
 
     /// Wrap a table in a table to signal that it should be rendered as HTML
-    pub fn wrap_html<'lua>(_: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
+    pub fn wrap_html(_: &Lua, table: Table) -> Result<Table> {
         table.set("type", "html")?;
         Ok(table)
     }
 
     /// Wrap a table in a table to signal that it should be rendered as a full HTML page
-    pub fn wrap_html_page<'lua>(_: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
+    pub fn wrap_html_page(_: &Lua, table: Table) -> Result<Table> {
         table.set("type", "html-page")?;
         Ok(table)
     }
 
     /// Wrap a table in a table to signal that it should be rendered as JSON
-    pub fn wrap_json<'lua>(_: Context<'lua>, table: Table<'lua>) -> Result<Table<'lua>> {
+    pub fn wrap_json(_: &Lua, table: Table) -> Result<Table> {
         table.set("type", "json")?;
         Ok(table)
     }
 
     /// Wrap a table to add headers to the response
-    pub fn wrap_headers<'lua>(
-        _: Context<'lua>,
-        (table, headers): (Table<'lua>, Table<'lua>),
-    ) -> Result<Table<'lua>> {
+    pub fn wrap_headers(_: &Lua, (table, headers): (Table, Table)) -> Result<Table> {
         table.set("headers", headers)?;
         Ok(table)
     }
 
     #[cfg(test)]
     mod tests {
-        use rlua::Lua;
+        use mlua::Lua;
 
         #[test]
         fn url_matches() {
@@ -354,9 +347,8 @@ mod utils {
             let lua = Lua::new();
 
             for (pattern, path, expected) in cases {
-                let res: bool = lua
-                    .context(|ctx| super::url_matches(ctx, (pattern.to_string(), path.to_string())))
-                    .unwrap();
+                let res: bool =
+                    super::url_matches(&lua, (pattern.to_string(), path.to_string())).unwrap();
                 if res != expected {
                     if expected {
                         panic!("expected {} to match {}", path, pattern);
@@ -392,27 +384,24 @@ mod utils {
 
             for (pattern, path, mut expected) in cases {
                 expected.sort_by_key(|(k, _)| k.to_owned());
-                lua.context(|ctx| {
-                    let res =
-                        super::url_extract(ctx, (pattern.to_string(), path.to_string())).unwrap();
-                    let mut res_vec = Vec::new();
-                    for pair in res.pairs::<String, String>() {
-                        let (key, value) = pair.unwrap();
-                        res_vec.push((key, value));
-                    }
-                    res_vec.sort_by_key(|(k, _)| k.clone());
+                let res = super::url_extract(&lua, (pattern.to_string(), path.to_string())).unwrap();
+                let mut res_vec = Vec::new();
+                for pair in res.pairs::<String, String>() {
+                    let (key, value) = pair.unwrap();
+                    res_vec.push((key, value));
+                }
+                res_vec.sort_by_key(|(k, _)| k.clone());
 
-                    let equal = res_vec
-                        .iter()
-                        .zip(expected.iter())
-                        .all(|((k1, v1), (k2, v2))| k1 == k2 && v1 == v2);
-                    if !equal {
-                        panic!(
-                            "expected {:?} to be {:?} for pattern {} and path {}",
-                            res_vec, expected, pattern, path
-                        );
-                    }
-                })
+                let equal = res_vec
+                    .iter()
+                    .zip(expected.iter())
+                    .all(|((k1, v1), (k2, v2))| k1 == k2 && v1 == v2);
+                if !equal {
+                    panic!(
+                        "expected {:?} to be {:?} for pattern {} and path {}",
+                        res_vec, expected, pattern, path
+                    );
+                }
             }
         }
     }
