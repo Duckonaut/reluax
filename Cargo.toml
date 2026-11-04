@@ -18,7 +18,7 @@ color-eyre = "0.6"
 http-body-util = "0.1"
 hyper = { version = "1.12", features = ["http1", "http2", "server"] }
 hyper-util = { version = "0.1", features = ["http1", "http2", "server", "tokio"] }
-mlua = { version = "0.12", features = ["lua55", "send", "vendored"] }
+mlua = { version = "0.12", features = ["lua54", "send", "vendored"] }
 tempfile = "3"
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net"] }
 utf8-read = "0.4.0"
