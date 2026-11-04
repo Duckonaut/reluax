@@ -28,7 +28,7 @@ enum Args {
         #[clap(
             short = 'a',
             long = "address",
-            default_value = "127.0.0.1",
+            default_value = "127.0.0.1:4310",
             help = "The address to serve on"
         )]
         address: String,
@@ -79,7 +79,7 @@ enum Args {
         #[clap(
             short = 'a',
             long = "address",
-            default_value = "127.0.0.1",
+            default_value = "127.0.0.1:4310",
             help = "The address to serve on"
         )]
         address: String,
