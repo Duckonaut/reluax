@@ -18,7 +18,7 @@ color-eyre = "0.6"
 http-body-util = "0.1"
 hyper = { version = "1.12", features = ["http1", "http2", "server"] }
 hyper-util = { version = "0.1", features = ["http1", "http2", "server", "tokio"] }
-mlua = { version = "0.12", features = ["luajit", "vendored", "send"] }
+mlua = { version = "0.12", features = ["lua55", "send", "vendored"] }
 tempfile = "3"
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "net"] }
 utf8-read = "0.4.0"
@@ -27,23 +27,3 @@ utf8-read = "0.4.0"
 [profile.dist]
 inherits = "release"
 lto = "thin"
-
-# Config for 'cargo dist'
-[workspace.metadata.dist]
-# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.8.0"
-# CI backends to support
-ci = ["github"]
-# The installers to generate for each app
-installers = ["shell"]
-# Target platforms to build apps for (Rust target-triple syntax)
-targets = ["x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
-# Publish jobs to run in CI
-pr-run-mode = "skip"
-
-[workspace.metadata.dist.dependencies.apt]
-luajit = "*"
-"libluajit-5.1-dev" = "*"
-
-[workspace.metadata.dist.dependencies.homebrew]
-luajit = "*"
