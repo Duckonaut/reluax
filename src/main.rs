@@ -26,12 +26,12 @@ enum Args {
         )]
         change_dir: std::path::PathBuf,
         #[clap(
-            short = 'p',
-            long = "port",
-            default_value = "4310",
-            help = "The port to serve on"
+            short = 'a',
+            long = "address",
+            default_value = "127.0.0.1",
+            help = "The address to serve on"
         )]
-        port: u16,
+        address: String,
         #[clap(
             short = 'l',
             long = "local",
@@ -77,12 +77,12 @@ enum Args {
         )]
         public_dir: std::path::PathBuf,
         #[clap(
-            short = 'p',
-            long = "port",
-            default_value = "4310",
-            help = "The port to serve on"
+            short = 'a',
+            long = "address",
+            default_value = "127.0.0.1",
+            help = "The address to serve on"
         )]
-        port: u16,
+        address: String,
         #[clap(
             short = 'l',
             long = "local",
@@ -111,7 +111,7 @@ async fn main() -> color_eyre::Result<()> {
     match args {
         Args::Serve {
             change_dir,
-            port,
+            address,
             local,
         } => {
             if !change_dir.is_dir() {
@@ -125,9 +125,9 @@ async fn main() -> color_eyre::Result<()> {
             println!("🌴 Project root: {}", change_dir.display().bright_yellow());
 
             if local {
-                serve_locally(change_dir, false, port, None).await
+                serve_locally(change_dir, false, &address, None).await
             } else {
-                serve_from_temp(change_dir, false, port, None).await
+                serve_from_temp(change_dir, false, &address, None).await
             }
         }
         Args::Build {
@@ -137,7 +137,7 @@ async fn main() -> color_eyre::Result<()> {
         Args::Dev {
             change_dir,
             public_dir,
-            port,
+            address,
             local,
         } => {
             if !change_dir.is_dir() {
@@ -165,9 +165,9 @@ async fn main() -> color_eyre::Result<()> {
             let public_dir = Some(public_dir.canonicalize()?);
 
             if local {
-                serve_locally(change_dir, true, port, public_dir).await
+                serve_locally(change_dir, true, &address, public_dir).await
             } else {
-                serve_from_temp(change_dir, true, port, public_dir).await
+                serve_from_temp(change_dir, true, &address, public_dir).await
             }
         }
         Args::New { name } => create_project(&name),
@@ -178,7 +178,7 @@ async fn main() -> color_eyre::Result<()> {
 async fn serve_locally(
     change_dir: PathBuf,
     dev_mode: bool,
-    port: u16,
+    address: &str,
     public_dir: Option<PathBuf>,
 ) -> Result<()> {
     println!("🌴 Running in local mode");
@@ -187,13 +187,13 @@ async fn serve_locally(
 
     ensure_entry_point().await?;
 
-    serve(dev_mode, port, public_dir).await
+    serve(dev_mode, address, public_dir).await
 }
 
 async fn serve_from_temp(
     change_dir: PathBuf,
     dev_mode: bool,
-    port: u16,
+    address: &str,
     public_dir: Option<PathBuf>,
 ) -> Result<()> {
     // Create a /tmp/reluax-XXXXXX directory for the server to pre-process files in.
@@ -229,7 +229,7 @@ async fn serve_from_temp(
 
     ensure_entry_point().await?;
 
-    serve(dev_mode, port, public_dir).await
+    serve(dev_mode, address, public_dir).await
 }
 
 async fn preprocess_current_dir() -> Result<()> {
@@ -258,7 +258,7 @@ async fn ensure_entry_point() -> Result<()> {
     Ok(())
 }
 
-async fn serve(dev_mode: bool, port: u16, public_dir: Option<PathBuf>) -> Result<()> {
+async fn serve(dev_mode: bool, address: &str, public_dir: Option<PathBuf>) -> Result<()> {
     println!("📦 Building Lua state...");
     let lua = luax::prepare_lua(dev_mode)?;
 
@@ -269,8 +269,8 @@ async fn serve(dev_mode: bool, port: u16, public_dir: Option<PathBuf>) -> Result
         println!("🌴 App name: {}", name.bright_yellow());
     }
 
-    println!("🛫 Starting server on port {}...", port);
-    server::Server::serve(lua, port, public_dir).await
+    println!("🛫 Starting server on address {}...", address);
+    server::Server::serve(lua, address, public_dir).await
 }
 
 fn recurse_copy_lua(from: &Path, to: &Path) -> Result<usize> {

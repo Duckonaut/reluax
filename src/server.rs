@@ -3,6 +3,7 @@ use std::io::Write;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use http_body_util::{BodyExt, Collected, Full};
@@ -19,7 +20,7 @@ use color_eyre::Result;
 use mlua::Lua;
 
 pub struct Server {
-    port: u16,
+    addr: SocketAddr,
     state: State,
 }
 
@@ -30,18 +31,20 @@ struct State {
 }
 
 impl Server {
-    pub async fn serve(lua: Lua, port: u16, public_dir: Option<PathBuf>) -> Result<()> {
+    pub async fn serve(lua: Lua, address: &str, public_dir: Option<PathBuf>) -> Result<()> {
         let state = State {
             lua: Arc::new(Mutex::new(lua)),
             public_dir,
         };
-        let server = Self { port, state };
+
+        let addr: SocketAddr = SocketAddr::from_str(address)?;
+
+        let server = Self { addr, state };
         server.start().await
     }
 
     async fn start(self) -> Result<()> {
-        let addr = SocketAddr::from(([127, 0, 0, 1], self.port));
-        let listener = TcpListener::bind(addr).await?;
+        let listener = TcpListener::bind(self.addr).await?;
 
         let state = self.state;
 
