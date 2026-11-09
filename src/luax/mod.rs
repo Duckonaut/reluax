@@ -121,10 +121,14 @@ pub fn preprocess(s: &str) -> Result<String> {
 
 pub fn preprocess_dir(path: &Path, output_path: &Path) -> Result<usize> {
     let mut preprocessed = 0;
+    let absolute_output_path = output_path.canonicalize()?;
     for entry in std::fs::read_dir(path)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
+            if path.canonicalize()? == absolute_output_path {
+                continue;
+            }
             let output_dir = output_path.join(path.file_name().unwrap());
             if !output_dir.is_dir() && output_dir.exists() {
                 return Err(std::io::Error::new(
@@ -136,7 +140,8 @@ pub fn preprocess_dir(path: &Path, output_path: &Path) -> Result<usize> {
             if !output_dir.exists() {
                 std::fs::create_dir(&output_dir)?;
             }
-            preprocessed += preprocess_dir(&path, &output_path.join(path.file_name().unwrap()))?;
+            let inner_path = output_path.join(path.file_name().unwrap());
+            preprocessed += preprocess_dir(&path, &inner_path)?;
         } else {
             if path.extension().unwrap_or_default() != "luax" {
                 continue;
