@@ -269,6 +269,13 @@ async fn serve(dev_mode: bool, address: &str, public_dir: Option<PathBuf>) -> Re
         println!("🌴 App name: {}", name.bright_yellow());
     }
 
+    if let Ok(xdg_run_dir) = std::env::var("XDG_RUNTIME_DIR") {
+        let pid_path: PathBuf = PathBuf::from(xdg_run_dir);
+        let pid_path = pid_path.join("reluax.pid");
+
+        println!("🪪 PID File: {}", pid_path.display());
+    }
+
     println!("🛫 Starting server on address {}...", address);
     server::Server::serve(lua, address, public_dir).await
 }
