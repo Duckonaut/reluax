@@ -108,7 +108,7 @@ async fn main() -> color_eyre::Result<()> {
     color_eyre::install().unwrap();
     let args = Args::parse();
 
-    match args {
+    let res = match args {
         Args::Serve {
             change_dir,
             address,
@@ -172,7 +172,16 @@ async fn main() -> color_eyre::Result<()> {
         }
         Args::New { name } => create_project(&name),
         Args::Init => init_project(),
+    };
+
+    if let Ok(xdg_run_dir) = std::env::var("XDG_RUNTIME_DIR") {
+        let pid_path: PathBuf = PathBuf::from(xdg_run_dir);
+        let pid_path = pid_path.join("reluax.pid");
+
+        std::fs::remove_file(pid_path)?;
     }
+
+    res
 }
 
 async fn serve_locally(
@@ -272,6 +281,11 @@ async fn serve(dev_mode: bool, address: &str, public_dir: Option<PathBuf>) -> Re
     if let Ok(xdg_run_dir) = std::env::var("XDG_RUNTIME_DIR") {
         let pid_path: PathBuf = PathBuf::from(xdg_run_dir);
         let pid_path = pid_path.join("reluax.pid");
+
+        let pid = std::process::id();
+        let pid_str = format!("{}", pid);
+
+        std::fs::write(&pid_path, pid_str)?;
 
         println!("🪪 PID File: {}", pid_path.display());
     }
